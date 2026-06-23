@@ -14,7 +14,8 @@
     "dev:frontend": "npm run dev --workspace @voc/frontend",
     "build": "npm run build --workspaces",
     "typecheck": "npm run typecheck --workspaces",
-    "lint": "npm run lint --workspaces"
+    "lint": "npm run lint --workspaces",
+    "seed:prototype": "npm run seed:prototype --workspace @voc/backend"
   },
   "engines": {
     "node": ">=20.0.0"
