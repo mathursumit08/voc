@@ -10,7 +10,8 @@
     "start": "node dist/server.js",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "lint": "eslint \"src/**/*.ts\"",
-    "prisma:generate": "prisma generate --schema data/models/schema.prisma"
+    "prisma:generate": "prisma generate --schema data/models/schema.prisma",
+    "seed:prototype": "tsx src/data/runSqlScript.ts data/scripts/001_seed_prototype_data.sql"
   },
   "dependencies": {
     "@prisma/client": "^5.22.0",

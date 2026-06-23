@@ -58,6 +58,22 @@ frontend  -> http://localhost:5173
 GET /api/v1/health
 ```
 
+## Prototype Seed Data
+
+VOC-003 seed data is available as a resettable SQL script:
+
+```text
+src/backend/data/scripts/001_seed_prototype_data.sql
+```
+
+It includes 50 dealers, sample customers, vehicles, job cards, warranty claims, feedback records, and dealer score rows.
+
+Run it only when you intentionally want to reset prototype data:
+
+```powershell
+npm run seed:prototype --workspace @voc/backend
+```
+
 ## Important Development Rule
 
 Do not manually run database migration commands unless explicitly requested. Backend startup is configured to apply pending SQL migrations when `RUN_MIGRATIONS_ON_START=true`. See `AGENTS.md` for all project engineering guardrails.
