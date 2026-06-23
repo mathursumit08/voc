@@ -1,0 +1,21 @@
+- VOC-001: VOC-001: Set up project foundation - https://github.com/mathursumit08/voc/issues/1
+- VOC-002: VOC-002: Define core database schema - https://github.com/mathursumit08/voc/issues/2
+- VOC-003: VOC-003: Seed prototype master data - https://github.com/mathursumit08/voc/issues/3
+- VOC-004: VOC-004: Upload feedback data - https://github.com/mathursumit08/voc/issues/4
+- VOC-005: VOC-005: Normalize feedback records - https://github.com/mathursumit08/voc/issues/5
+- VOC-006: VOC-006: Mask PII before analysis - https://github.com/mathursumit08/voc/issues/6
+- VOC-007: VOC-007: Run language detection and translation - https://github.com/mathursumit08/voc/issues/7
+- VOC-008: VOC-008: Analyze sentiment and topics - https://github.com/mathursumit08/voc/issues/8
+- VOC-009: VOC-009: Classify automotive issues - https://github.com/mathursumit08/voc/issues/9
+- VOC-010: VOC-010: Calculate urgency score - https://github.com/mathursumit08/voc/issues/10
+- VOC-011: VOC-011: Build feedback explorer - https://github.com/mathursumit08/voc/issues/11
+- VOC-012: VOC-012: Build OEM executive dashboard - https://github.com/mathursumit08/voc/issues/12
+- VOC-013: VOC-013: Build dealer performance dashboard - https://github.com/mathursumit08/voc/issues/13
+- VOC-014: VOC-014: Detect repeat complaints - https://github.com/mathursumit08/voc/issues/14
+- VOC-015: VOC-015: Generate churn risk score - https://github.com/mathursumit08/voc/issues/15
+- VOC-016: VOC-016: Create mock CRM recovery tasks - https://github.com/mathursumit08/voc/issues/16
+- VOC-017: VOC-017: Generate dealer response drafts - https://github.com/mathursumit08/voc/issues/17
+- VOC-018: VOC-018: Detect warranty and quality signals - https://github.com/mathursumit08/voc/issues/18
+- VOC-019: VOC-019: Build human review queue - https://github.com/mathursumit08/voc/issues/19
+- VOC-020: VOC-020: Add role-based access control - https://github.com/mathursumit08/voc/issues/20
+- VOC-021: VOC-021: Add prototype demo polish and sample scenarios - https://github.com/mathursumit08/voc/issues/21

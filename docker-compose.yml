@@ -1,0 +1,46 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: voc-postgres
+    env_file:
+      - .env.backend
+    ports:
+      - "5432:5432"
+    volumes:
+      - voc-postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: voc-backend
+    env_file:
+      - .env.backend
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgresql://voc_user:voc_password@postgres:5432/voc
+    ports:
+      - "4000:4000"
+
+  frontend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: voc-frontend
+    env_file:
+      - .env.frontend
+    depends_on:
+      - backend
+    command: ["npm", "run", "dev", "--workspace", "@voc/frontend", "--", "--host", "0.0.0.0"]
+    ports:
+      - "5173:5173"
+
+volumes:
+  voc-postgres-data:
