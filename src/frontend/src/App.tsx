@@ -1,4 +1,5 @@
-import { AlertTriangle, Bell, Car, LineChart, Search, Sparkles, TrendingUp } from "lucide-react";
+import { useState } from "react";
+import { AlertTriangle, Bell, Car, LineChart, Search, Sparkles, TrendingUp, UploadCloud } from "lucide-react";
 import type { ReactNode } from "react";
 import { MetricCard } from "./components/MetricCard";
 
@@ -81,6 +82,7 @@ export function App() {
         </div>
 
         <aside className="space-y-4">
+          <FeedbackUploadCard />
           <div className="rounded-2xl bg-white p-5 shadow-card">
             <div className="mb-4 flex items-center gap-3">
               <span className="rounded-xl bg-indigo-100 p-2 text-indigo-600"><Sparkles size={20} /></span>
@@ -109,6 +111,102 @@ export function App() {
         </aside>
       </section>
     </main>
+  );
+}
+
+interface UploadResult {
+  totalRows: number;
+  acceptedRows: number;
+  rejectedRows: number;
+  duplicateRows: number;
+  insertedRows: number;
+}
+
+function FeedbackUploadCard() {
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [isUploading, setIsUploading] = useState(false);
+  const [message, setMessage] = useState<string>("Accepted formats: .csv and .xlsx only.");
+  const [result, setResult] = useState<UploadResult | null>(null);
+
+  async function uploadFeedback() {
+    if (!selectedFile) {
+      setMessage("Choose a feedback file before uploading.");
+      return;
+    }
+
+    const formData = new FormData();
+    formData.append("file", selectedFile);
+    setIsUploading(true);
+    setMessage("Uploading feedback data...");
+
+    try {
+      const response = await fetch(`${import.meta.env.VITE_API_BASE_URL}/uploads/feedback`, {
+        method: "POST",
+        body: formData
+      });
+      const payload = await response.json();
+
+      if (!response.ok) {
+        throw new Error(payload.message ?? "Feedback upload failed.");
+      }
+
+      setResult(payload);
+      setMessage("Upload processed successfully.");
+    } catch (error) {
+      setResult(null);
+      setMessage(error instanceof Error ? error.message : "Feedback upload failed.");
+    } finally {
+      setIsUploading(false);
+    }
+  }
+
+  return (
+    <section className="rounded-2xl bg-white p-5 shadow-card">
+      <div className="mb-4 flex items-center gap-3">
+        <span className="rounded-xl bg-blue-100 p-2 text-blue-600">
+          <UploadCloud size={20} />
+        </span>
+        <div>
+          <h2 className="font-bold">Feedback Upload</h2>
+          <p className="text-xs text-slate-500">Accepted: .csv, .xlsx</p>
+        </div>
+      </div>
+      <p className="mb-3 rounded-xl bg-blue-50 px-3 py-2 text-xs font-semibold text-blue-700">
+        Upload only CSV or Excel workbook files with extensions .csv or .xlsx.
+      </p>
+      <input
+        className="mb-3 w-full rounded-xl border border-slate-200 px-3 py-2 text-sm"
+        type="file"
+        accept=".csv,.xlsx"
+        onChange={(event) => setSelectedFile(event.target.files?.[0] ?? null)}
+      />
+      <button
+        className="w-full rounded-xl bg-blue-600 px-4 py-2 text-sm font-bold text-white disabled:cursor-not-allowed disabled:bg-slate-300"
+        type="button"
+        disabled={isUploading}
+        onClick={uploadFeedback}
+      >
+        {isUploading ? "Uploading..." : "Upload Feedback"}
+      </button>
+      <p className="mt-3 text-sm text-slate-600">{message}</p>
+      {result ? (
+        <dl className="mt-4 grid grid-cols-2 gap-2 text-sm">
+          <Metric label="Total" value={result.totalRows} />
+          <Metric label="Inserted" value={result.insertedRows} />
+          <Metric label="Rejected" value={result.rejectedRows} />
+          <Metric label="Duplicates" value={result.duplicateRows} />
+        </dl>
+      ) : null}
+    </section>
+  );
+}
+
+function Metric({ label, value }: { label: string; value: number }) {
+  return (
+    <div className="rounded-xl bg-slate-50 p-3">
+      <dt className="text-xs font-bold uppercase tracking-wide text-slate-400">{label}</dt>
+      <dd className="text-lg font-black text-slate-950">{value}</dd>
+    </div>
   );
 }
 

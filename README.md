@@ -74,6 +74,41 @@ Run it only when you intentionally want to reset prototype data:
 npm run seed:prototype --workspace @voc/backend
 ```
 
+## Feedback Upload
+
+Feedback uploads are available at:
+
+```text
+POST /api/v1/uploads/feedback
+```
+
+Use multipart form-data with field name `file`.
+
+Accepted file formats:
+
+```text
+.csv
+.xlsx
+```
+
+Required columns:
+
+```text
+sourceType, sourceReferenceId, feedbackDate, rawText
+```
+
+Optional columns:
+
+```text
+maskedText, rating, customerExternalId, vinHash, dealerCode, jobCardExternalId, warrantyClaimExternalId
+```
+
+Sample file:
+
+```text
+src/backend/data/scripts/sample_feedback_upload.csv
+```
+
 ## Important Development Rule
 
 Do not manually run database migration commands unless explicitly requested. Backend startup is configured to apply pending SQL migrations when `RUN_MIGRATIONS_ON_START=true`. See `AGENTS.md` for all project engineering guardrails.

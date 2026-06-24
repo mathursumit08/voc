@@ -1,0 +1,5 @@
+sourceType,sourceReferenceId,feedbackDate,rawText,maskedText,rating,customerExternalId,vinHash,dealerCode,jobCardExternalId,warrantyClaimExternalId
+Survey,UPLOAD-FB-001,2026-06-20,"Advisor explained the service estimate clearly and delivery was on time.","Advisor explained the service estimate clearly and delivery was on time.",5,CUST-001,VINHASH-001,AT-BLR-001,JC-001,
+WarrantyClaim,UPLOAD-FB-002,2026-06-21,"Charging issue is still unresolved after warranty inspection.","Charging issue is still unresolved after warranty inspection.",1,CUST-015,VINHASH-015,VA-GUR-020,JC-015,WC-009
+GoogleReview,UPLOAD-FB-003,2026-06-22,"Clean facility and polite staff, but billing took longer than expected.","Clean facility and polite staff, but billing took longer than expected.",4,,,,,
+

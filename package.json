@@ -9,7 +9,7 @@
     "src/shared"
   ],
   "scripts": {
-    "dev": "npm run dev --workspace @voc/backend",
+    "dev": "concurrently \"npm run dev --workspace @voc/frontend\" \"npm run dev --workspace @voc/backend\"",
     "dev:backend": "npm run dev --workspace @voc/backend",
     "dev:frontend": "npm run dev --workspace @voc/frontend",
     "build": "npm run build --workspaces",
@@ -19,6 +19,9 @@
   },
   "engines": {
     "node": ">=20.0.0"
+  },
+  "devDependencies": {
+    "concurrently": "^9.1.2"
   }
 }
 
