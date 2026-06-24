@@ -21,6 +21,10 @@ export const openApiDocument = {
     {
       name: "Uploads",
       description: "Prototype data upload endpoints"
+    },
+    {
+      name: "Feedback",
+      description: "Normalized feedback record exploration endpoints"
     }
   ],
   paths: {
@@ -81,6 +85,139 @@ export const openApiDocument = {
           },
           "400": {
             description: "Invalid upload request",
+            content: {
+              "application/json": {
+                schema: {
+                  $ref: "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/feedback": {
+      get: {
+        tags: ["Feedback"],
+        summary: "List normalized feedback records",
+        description:
+          "Returns feedback records with dealer, customer, and vehicle context. Use maskedText for NLP or UI preview when personal data should not be exposed.",
+        operationId: "listFeedbackRecords",
+        parameters: [
+          {
+            name: "sourceType",
+            in: "query",
+            schema: {
+              type: "string",
+              enum: ["Survey", "JobCard", "WarrantyClaim", "GoogleReview", "SocialMedia", "CallCenter", "MobileApp", "ManualUpload"]
+            }
+          },
+          {
+            name: "processingStatus",
+            in: "query",
+            schema: {
+              type: "string",
+              enum: ["Pending", "Processing", "Completed", "Failed", "NeedsReview"]
+            }
+          },
+          {
+            name: "dealerId",
+            in: "query",
+            schema: {
+              type: "string",
+              format: "uuid"
+            }
+          },
+          {
+            name: "customerId",
+            in: "query",
+            schema: {
+              type: "string",
+              format: "uuid"
+            }
+          },
+          {
+            name: "vehicleId",
+            in: "query",
+            schema: {
+              type: "string",
+              format: "uuid"
+            }
+          },
+          {
+            name: "limit",
+            in: "query",
+            schema: {
+              type: "integer",
+              minimum: 1,
+              maximum: 100,
+              default: 50
+            }
+          },
+          {
+            name: "offset",
+            in: "query",
+            schema: {
+              type: "integer",
+              minimum: 0,
+              default: 0
+            }
+          }
+        ],
+        responses: {
+          "200": {
+            description: "Feedback records returned",
+            content: {
+              "application/json": {
+                schema: {
+                  $ref: "#/components/schemas/FeedbackRecordListResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            description: "Invalid filter request",
+            content: {
+              "application/json": {
+                schema: {
+                  $ref: "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/feedback/{id}": {
+      get: {
+        tags: ["Feedback"],
+        summary: "Get feedback record details",
+        description: "Returns one normalized feedback record with related dealer, customer, vehicle, job card, and warranty claim context.",
+        operationId: "getFeedbackRecord",
+        parameters: [
+          {
+            name: "id",
+            in: "path",
+            required: true,
+            schema: {
+              type: "string",
+              format: "uuid"
+            }
+          }
+        ],
+        responses: {
+          "200": {
+            description: "Feedback record returned",
+            content: {
+              "application/json": {
+                schema: {
+                  $ref: "#/components/schemas/FeedbackRecordDetail"
+                }
+              }
+            }
+          },
+          "404": {
+            description: "Feedback record not found",
             content: {
               "application/json": {
                 schema: {
@@ -191,6 +328,131 @@ export const openApiDocument = {
             }
           }
         }
+      },
+      FeedbackRecordSummary: {
+        type: "object",
+        required: ["id", "sourceType", "sourceReferenceId", "feedbackDate", "rawText", "maskedText", "processingStatus", "createdAt"],
+        properties: {
+          id: {
+            type: "string",
+            format: "uuid"
+          },
+          sourceType: {
+            type: "string",
+            enum: ["Survey", "JobCard", "WarrantyClaim", "GoogleReview", "SocialMedia", "CallCenter", "MobileApp", "ManualUpload"]
+          },
+          sourceReferenceId: {
+            type: "string",
+            example: "SUR-2025-0001"
+          },
+          feedbackDate: {
+            type: "string",
+            format: "date-time"
+          },
+          rawText: {
+            type: "string",
+            description: "Original feedback text retained for traceability."
+          },
+          maskedText: {
+            type: "string",
+            description: "Feedback text with supported PII patterns masked for NLP and UI preview.",
+            example: "Service advisor called [PhoneMasked] and confirmed pickup."
+          },
+          rating: {
+            type: "integer",
+            nullable: true,
+            minimum: 1,
+            maximum: 5
+          },
+          processingStatus: {
+            type: "string",
+            enum: ["Pending", "Processing", "Completed", "Failed", "NeedsReview"]
+          },
+          createdAt: {
+            type: "string",
+            format: "date-time"
+          },
+          dealerName: {
+            type: "string",
+            nullable: true
+          },
+          dealerCode: {
+            type: "string",
+            nullable: true
+          },
+          customerName: {
+            type: "string",
+            nullable: true
+          },
+          vehicleModel: {
+            type: "string",
+            nullable: true
+          }
+        }
+      },
+      FeedbackRecordListResponse: {
+        type: "object",
+        required: ["totalCount", "limit", "offset", "records"],
+        properties: {
+          totalCount: {
+            type: "integer",
+            example: 127
+          },
+          limit: {
+            type: "integer",
+            example: 50
+          },
+          offset: {
+            type: "integer",
+            example: 0
+          },
+          records: {
+            type: "array",
+            items: {
+              $ref: "#/components/schemas/FeedbackRecordSummary"
+            }
+          }
+        }
+      },
+      FeedbackRecordDetail: {
+        allOf: [
+          {
+            $ref: "#/components/schemas/FeedbackRecordSummary"
+          },
+          {
+            type: "object",
+            properties: {
+              processingError: {
+                type: "string",
+                nullable: true
+              },
+              updatedAt: {
+                type: "string",
+                format: "date-time"
+              },
+              dealer: {
+                type: "object",
+                nullable: true
+              },
+              customer: {
+                type: "object",
+                nullable: true
+              },
+              vehicle: {
+                type: "object",
+                nullable: true
+              },
+              jobCard: {
+                type: "object",
+                nullable: true
+              },
+              warrantyClaim: {
+                type: "object",
+                nullable: true
+              }
+            }
+          }
+        ]
       }
     }
   }

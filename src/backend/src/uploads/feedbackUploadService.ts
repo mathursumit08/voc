@@ -1,16 +1,13 @@
 import JSZip from "jszip";
 import { pool } from "../db/pool.js";
+import { maskPii } from "../privacy/piiMasker.js";
 
-const allowedSourceTypes = new Set([
-  "Survey",
-  "JobCard",
-  "WarrantyClaim",
-  "GoogleReview",
-  "SocialMedia",
-  "CallCenter",
-  "MobileApp",
-  "ManualUpload"
-]);
+const sourceTypeByNormalizedValue = new Map(
+  ["Survey", "JobCard", "WarrantyClaim", "GoogleReview", "SocialMedia", "CallCenter", "MobileApp", "ManualUpload"].map((sourceType) => [
+    sourceType.toLowerCase(),
+    sourceType
+  ])
+);
 
 const requiredColumns = ["sourceType", "sourceReferenceId", "feedbackDate", "rawText"] as const;
 
@@ -61,6 +58,10 @@ function parseRating(value: string) {
 
   const rating = Number(value);
   return Number.isInteger(rating) && rating >= 1 && rating <= 5 ? rating : null;
+}
+
+function normalizeSourceType(value: string) {
+  return sourceTypeByNormalizedValue.get(value.replace(/[\s_-]/g, "").toLowerCase()) ?? null;
 }
 
 function decodeXmlText(value: string) {
@@ -273,14 +274,14 @@ function validateRows(rows: Record<string, unknown>[]) {
       return;
     }
 
-    const sourceType = normalizeCell(row.sourceType);
+    const sourceType = normalizeSourceType(normalizeCell(row.sourceType));
     const sourceReferenceId = normalizeCell(row.sourceReferenceId);
     const feedbackDate = parseDate(normalizeCell(row.feedbackDate));
     const rating = parseRating(normalizeCell(row.rating));
     const sourceKey = `${sourceType}:${sourceReferenceId}`;
 
-    if (!allowedSourceTypes.has(sourceType)) {
-      rejected.push({ rowNumber, sourceReferenceId, reason: `Invalid sourceType: ${sourceType}` });
+    if (!sourceType) {
+      rejected.push({ rowNumber, sourceReferenceId, reason: `Invalid sourceType: ${normalizeCell(row.sourceType)}` });
       return;
     }
 
@@ -306,7 +307,8 @@ function validateRows(rows: Record<string, unknown>[]) {
       sourceReferenceId,
       feedbackDate,
       rawText: normalizeCell(row.rawText),
-      maskedText: normalizeCell(row.maskedText) || undefined,
+      // Downstream NLP stories should consume maskedText so analysis does not expose common PII patterns.
+      maskedText: normalizeCell(row.maskedText) || maskPii(normalizeCell(row.rawText)),
       rating,
       customerExternalId: normalizeCell(row.customerExternalId) || undefined,
       vinHash: normalizeCell(row.vinHash) || undefined,
