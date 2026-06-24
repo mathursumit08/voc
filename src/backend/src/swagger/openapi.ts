@@ -188,6 +188,168 @@ export const openApiDocument = {
         }
       }
     },
+    "/feedback/language-detection/run": {
+      post: {
+        tags: ["Feedback"],
+        summary: "Run language detection for pending feedback",
+        description:
+          "Processes feedback records without NLP results. The prototype reads maskedText when available, detects English/Hindi/Tamil/Telugu, and stores translated English text for non-English feedback.",
+        operationId: "runPendingFeedbackLanguageDetection",
+        requestBody: {
+          required: false,
+          content: {
+            "application/json": {
+              schema: {
+                type: "object",
+                properties: {
+                  limit: {
+                    type: "integer",
+                    minimum: 1,
+                    maximum: 100,
+                    default: 25
+                  }
+                }
+              }
+            }
+          }
+        },
+        responses: {
+          "200": {
+            description: "Language detection completed",
+            content: {
+              "application/json": {
+                schema: {
+                  $ref: "#/components/schemas/LanguageProcessingBatchResult"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/feedback/{id}/language-detection": {
+      post: {
+        tags: ["Feedback"],
+        summary: "Run language detection for one feedback record",
+        description:
+          "Detects the original feedback language and stores translated English text when the record is not English.",
+        operationId: "runFeedbackLanguageDetection",
+        parameters: [
+          {
+            name: "id",
+            in: "path",
+            required: true,
+            schema: {
+              type: "string",
+              format: "uuid"
+            }
+          }
+        ],
+        responses: {
+          "200": {
+            description: "Language result stored",
+            content: {
+              "application/json": {
+                schema: {
+                  $ref: "#/components/schemas/LanguageProcessingResult"
+                }
+              }
+            }
+          },
+          "404": {
+            description: "Feedback record not found",
+            content: {
+              "application/json": {
+                schema: {
+                  $ref: "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/feedback/sentiment-topics/run": {
+      post: {
+        tags: ["Feedback"],
+        summary: "Run sentiment and topic extraction for pending feedback",
+        description:
+          "Processes feedback records missing sentiment or topic values. The prototype uses translated English text when available, otherwise masked feedback text.",
+        operationId: "runPendingFeedbackSentimentTopics",
+        requestBody: {
+          required: false,
+          content: {
+            "application/json": {
+              schema: {
+                type: "object",
+                properties: {
+                  limit: {
+                    type: "integer",
+                    minimum: 1,
+                    maximum: 100,
+                    default: 25
+                  }
+                }
+              }
+            }
+          }
+        },
+        responses: {
+          "200": {
+            description: "Sentiment and topic extraction completed",
+            content: {
+              "application/json": {
+                schema: {
+                  $ref: "#/components/schemas/SentimentTopicBatchResult"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/feedback/{id}/sentiment-topics": {
+      post: {
+        tags: ["Feedback"],
+        summary: "Run sentiment and topic extraction for one feedback record",
+        description:
+          "Classifies sentiment, extracts prototype topic tags, and stores confidence/model source in the NLP result.",
+        operationId: "runFeedbackSentimentTopics",
+        parameters: [
+          {
+            name: "id",
+            in: "path",
+            required: true,
+            schema: {
+              type: "string",
+              format: "uuid"
+            }
+          }
+        ],
+        responses: {
+          "200": {
+            description: "Sentiment and topic result stored",
+            content: {
+              "application/json": {
+                schema: {
+                  $ref: "#/components/schemas/SentimentTopicProcessingResult"
+                }
+              }
+            }
+          },
+          "404": {
+            description: "Feedback record not found",
+            content: {
+              "application/json": {
+                schema: {
+                  $ref: "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/feedback/{id}": {
       get: {
         tags: ["Feedback"],
@@ -414,6 +576,179 @@ export const openApiDocument = {
           }
         }
       },
+      NlpResult: {
+        type: "object",
+        nullable: true,
+        properties: {
+          detectedLanguage: {
+            type: "string",
+            example: "Hindi"
+          },
+          translatedText: {
+            type: "string",
+            nullable: true,
+            example: "[Prototype HI to EN] service delay issue"
+          },
+          sentimentLabel: {
+            type: "string",
+            enum: ["Positive", "Neutral", "Negative", "Mixed", "Unknown"],
+            example: "Negative"
+          },
+          sentimentScore: {
+            type: "number",
+            format: "float",
+            nullable: true,
+            example: -0.74
+          },
+          topics: {
+            type: "array",
+            items: {
+              type: "string"
+            },
+            example: ["RepairQuality", "DeliveryDelay"]
+          },
+          entities: {
+            type: "object",
+            nullable: true
+          },
+          confidenceScore: {
+            type: "number",
+            format: "float",
+            nullable: true,
+            example: 0.78
+          },
+          modelName: {
+            type: "string",
+            nullable: true,
+            example: "PrototypeNlpRules"
+          },
+          modelVersion: {
+            type: "string",
+            nullable: true,
+            example: "v1"
+          },
+          processedAt: {
+            type: "string",
+            format: "date-time",
+            nullable: true
+          }
+        }
+      },
+      SentimentTopicProcessingResult: {
+        type: "object",
+        required: ["feedbackRecordId", "sentimentLabel", "sentimentScore", "topics", "confidenceScore", "processedText", "modelName", "modelVersion"],
+        properties: {
+          feedbackRecordId: {
+            type: "string",
+            format: "uuid"
+          },
+          sentimentLabel: {
+            type: "string",
+            enum: ["Positive", "Neutral", "Negative", "Mixed"]
+          },
+          sentimentScore: {
+            type: "number",
+            format: "float",
+            minimum: -1,
+            maximum: 1
+          },
+          topics: {
+            type: "array",
+            minItems: 1,
+            items: {
+              type: "string"
+            },
+            example: ["ServiceQuality", "Communication"]
+          },
+          confidenceScore: {
+            type: "number",
+            format: "float",
+            minimum: 0,
+            maximum: 1
+          },
+          processedText: {
+            type: "string",
+            description: "Translated English text when available; otherwise the masked feedback text."
+          },
+          modelName: {
+            type: "string",
+            example: "PrototypeNlpRules"
+          },
+          modelVersion: {
+            type: "string",
+            example: "v1"
+          }
+        }
+      },
+      SentimentTopicBatchResult: {
+        type: "object",
+        required: ["requestedLimit", "processedCount", "records"],
+        properties: {
+          requestedLimit: {
+            type: "integer",
+            example: 25
+          },
+          processedCount: {
+            type: "integer",
+            example: 16
+          },
+          records: {
+            type: "array",
+            items: {
+              $ref: "#/components/schemas/SentimentTopicProcessingResult"
+            }
+          }
+        }
+      },
+      LanguageProcessingResult: {
+        type: "object",
+        required: ["feedbackRecordId", "detectedLanguage", "translatedText", "confidenceScore", "processedText"],
+        properties: {
+          feedbackRecordId: {
+            type: "string",
+            format: "uuid"
+          },
+          detectedLanguage: {
+            type: "string",
+            enum: ["English", "Hindi", "Tamil", "Telugu"]
+          },
+          translatedText: {
+            type: "string",
+            nullable: true,
+            description: "English translation for non-English records. English records return null."
+          },
+          confidenceScore: {
+            type: "number",
+            format: "float",
+            minimum: 0,
+            maximum: 1
+          },
+          processedText: {
+            type: "string",
+            description: "Translated English text when available; otherwise the masked feedback text."
+          }
+        }
+      },
+      LanguageProcessingBatchResult: {
+        type: "object",
+        required: ["requestedLimit", "processedCount", "records"],
+        properties: {
+          requestedLimit: {
+            type: "integer",
+            example: 25
+          },
+          processedCount: {
+            type: "integer",
+            example: 16
+          },
+          records: {
+            type: "array",
+            items: {
+              $ref: "#/components/schemas/LanguageProcessingResult"
+            }
+          }
+        }
+      },
       FeedbackRecordDetail: {
         allOf: [
           {
@@ -449,6 +784,9 @@ export const openApiDocument = {
               warrantyClaim: {
                 type: "object",
                 nullable: true
+              },
+              nlpResult: {
+                $ref: "#/components/schemas/NlpResult"
               }
             }
           }

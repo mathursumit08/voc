@@ -138,6 +138,44 @@ Supported `processingStatus` values:
 Pending, Processing, Completed, Failed, NeedsReview
 ```
 
+## Language Detection And Translation
+
+VOC-007 language processing stores results in `nlp_results` using the existing schema. The prototype uses deterministic rules for English, Hindi, Tamil, and Telugu detection, reads `maskedText` before falling back to `rawText`, and stores translated English text for non-English feedback.
+
+```text
+POST /api/v1/feedback/:id/language-detection
+POST /api/v1/feedback/language-detection/run
+```
+
+The batch endpoint accepts an optional JSON body:
+
+```json
+{
+  "limit": 25
+}
+```
+
+Feedback details include `nlpResult.detectedLanguage` and `nlpResult.translatedText` after language processing runs.
+
+## Sentiment And Topic Extraction
+
+VOC-008 sentiment and topic extraction updates the same `nlp_results` row. The prototype uses deterministic keyword rules for stakeholder demo purposes, stores `sentimentLabel`, `sentimentScore`, one or more `topics`, and records the processing source as `PrototypeNlpRules` version `v1`.
+
+```text
+POST /api/v1/feedback/:id/sentiment-topics
+POST /api/v1/feedback/sentiment-topics/run
+```
+
+The batch endpoint accepts an optional JSON body:
+
+```json
+{
+  "limit": 25
+}
+```
+
+Feedback details include `nlpResult.sentimentLabel`, `nlpResult.sentimentScore`, `nlpResult.topics`, `nlpResult.confidenceScore`, and the NLP model source after processing runs.
+
 ## Important Development Rule
 
 Do not manually run database migration commands unless explicitly requested. Backend startup is configured to apply pending SQL migrations when `RUN_MIGRATIONS_ON_START=true`. See `AGENTS.md` for all project engineering guardrails.
