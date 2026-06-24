@@ -24,7 +24,8 @@ const envSchema = z.object({
   SWAGGER_TITLE: z.string().default("VoC Prototype API"),
   SWAGGER_VERSION: z.string().default("1.0.0"),
   RUN_MIGRATIONS_ON_START: z.coerce.boolean().default(true),
-  MIGRATIONS_DIR: z.string().default("src/backend/data/migrations")
+  MIGRATIONS_DIR: z.string().default("src/backend/data/migrations"),
+  UPLOAD_MAX_FILE_SIZE_BYTES: z.coerce.number().int().positive().default(5_242_880)
 });
 
 export const env = envSchema.parse(process.env);
