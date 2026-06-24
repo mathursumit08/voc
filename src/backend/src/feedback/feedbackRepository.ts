@@ -1,0 +1,145 @@
+import { pool } from "../db/pool.js";
+
+const allowedSourceTypes = new Set([
+  "Survey",
+  "JobCard",
+  "WarrantyClaim",
+  "GoogleReview",
+  "SocialMedia",
+  "CallCenter",
+  "MobileApp",
+  "ManualUpload"
+]);
+
+const allowedProcessingStatuses = new Set(["Pending", "Processing", "Completed", "Failed", "NeedsReview"]);
+
+export interface FeedbackFilters {
+  sourceType?: string;
+  processingStatus?: string;
+  dealerId?: string;
+  customerId?: string;
+  vehicleId?: string;
+  limit: number;
+  offset: number;
+}
+
+export function validateFeedbackFilters(filters: FeedbackFilters) {
+  if (filters.sourceType && !allowedSourceTypes.has(filters.sourceType)) {
+    throw new Error(`Invalid sourceType filter: ${filters.sourceType}`);
+  }
+
+  if (filters.processingStatus && !allowedProcessingStatuses.has(filters.processingStatus)) {
+    throw new Error(`Invalid processingStatus filter: ${filters.processingStatus}`);
+  }
+}
+
+export async function listFeedbackRecords(filters: FeedbackFilters) {
+  validateFeedbackFilters(filters);
+
+  const conditions: string[] = [];
+  const values: unknown[] = [];
+
+  function addCondition(sql: string, value: unknown) {
+    values.push(value);
+    conditions.push(sql.replace("?", `$${values.length}`));
+  }
+
+  if (filters.sourceType) {
+    addCondition("fr.source_type = ?::\"FeedbackSourceType\"", filters.sourceType);
+  }
+
+  if (filters.processingStatus) {
+    addCondition("fr.processing_status = ?::\"ProcessingStatus\"", filters.processingStatus);
+  }
+
+  if (filters.dealerId) {
+    addCondition("fr.dealer_id = ?::uuid", filters.dealerId);
+  }
+
+  if (filters.customerId) {
+    addCondition("fr.customer_id = ?::uuid", filters.customerId);
+  }
+
+  if (filters.vehicleId) {
+    addCondition("fr.vehicle_id = ?::uuid", filters.vehicleId);
+  }
+
+  values.push(filters.limit, filters.offset);
+  const limitParam = `$${values.length - 1}`;
+  const offsetParam = `$${values.length}`;
+  const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(" AND ")}` : "";
+
+  // Keep the listing query explicit because this endpoint drives filtering in
+  // feedback explorer screens and should stay aligned with indexed columns.
+  const result = await pool.query(
+    `
+      SELECT
+        fr.id,
+        fr.source_type AS "sourceType",
+        fr.source_reference_id AS "sourceReferenceId",
+        fr.feedback_date AS "feedbackDate",
+        fr.raw_text AS "rawText",
+        fr.masked_text AS "maskedText",
+        fr.rating,
+        fr.processing_status AS "processingStatus",
+        fr.created_at AS "createdAt",
+        d.name AS "dealerName",
+        d.code AS "dealerCode",
+        c.masked_name AS "customerName",
+        v.model AS "vehicleModel",
+        COUNT(*) OVER()::int AS "totalCount"
+      FROM feedback_records fr
+      LEFT JOIN dealers d ON d.id = fr.dealer_id
+      LEFT JOIN customers c ON c.id = fr.customer_id
+      LEFT JOIN vehicles v ON v.id = fr.vehicle_id
+      ${whereClause}
+      ORDER BY fr.feedback_date DESC, fr.created_at DESC
+      LIMIT ${limitParam}
+      OFFSET ${offsetParam};
+    `,
+    values
+  );
+
+  const totalCount = result.rows[0]?.totalCount ?? 0;
+  return {
+    totalCount,
+    limit: filters.limit,
+    offset: filters.offset,
+    records: result.rows.map(({ totalCount: _totalCount, ...row }) => row)
+  };
+}
+
+export async function getFeedbackRecordById(id: string) {
+  const result = await pool.query(
+    `
+      SELECT
+        fr.id,
+        fr.source_type AS "sourceType",
+        fr.source_reference_id AS "sourceReferenceId",
+        fr.feedback_date AS "feedbackDate",
+        fr.raw_text AS "rawText",
+        fr.masked_text AS "maskedText",
+        fr.rating,
+        fr.processing_status AS "processingStatus",
+        fr.processing_error AS "processingError",
+        fr.created_at AS "createdAt",
+        fr.updated_at AS "updatedAt",
+        jsonb_build_object('id', d.id, 'name', d.name, 'code', d.code, 'region', d.region) AS dealer,
+        jsonb_build_object('id', c.id, 'maskedName', c.masked_name, 'city', c.city, 'state', c.state) AS customer,
+        jsonb_build_object('id', v.id, 'model', v.model, 'variant', v.variant, 'modelYear', v.model_year) AS vehicle,
+        jsonb_build_object('id', jc.id, 'externalId', jc.external_id, 'serviceType', jc.service_type) AS "jobCard",
+        jsonb_build_object('id', wc.id, 'externalId', wc.external_id, 'partCode', wc.part_code, 'claimCategory', wc.claim_category) AS "warrantyClaim"
+      FROM feedback_records fr
+      LEFT JOIN dealers d ON d.id = fr.dealer_id
+      LEFT JOIN customers c ON c.id = fr.customer_id
+      LEFT JOIN vehicles v ON v.id = fr.vehicle_id
+      LEFT JOIN job_cards jc ON jc.id = fr.job_card_id
+      LEFT JOIN warranty_claims wc ON wc.id = fr.warranty_claim_id
+      WHERE fr.id = $1::uuid;
+    `,
+    [id]
+  );
+
+  return result.rows[0] ?? null;
+}
+
