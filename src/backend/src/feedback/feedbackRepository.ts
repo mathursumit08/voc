@@ -124,6 +124,21 @@ export async function getFeedbackRecordById(id: string) {
         fr.processing_error AS "processingError",
         fr.created_at AS "createdAt",
         fr.updated_at AS "updatedAt",
+        CASE
+          WHEN nr.id IS NULL THEN NULL
+          ELSE jsonb_build_object(
+            'detectedLanguage', nr.detected_language,
+            'translatedText', nr.translated_text,
+            'sentimentLabel', nr.sentiment_label,
+            'sentimentScore', nr.sentiment_score,
+            'topics', nr.topics,
+            'entities', nr.entities,
+            'confidenceScore', nr.confidence_score,
+            'modelName', nr.model_name,
+            'modelVersion', nr.model_version,
+            'processedAt', nr.processed_at
+          )
+        END AS "nlpResult",
         jsonb_build_object('id', d.id, 'name', d.name, 'code', d.code, 'region', d.region) AS dealer,
         jsonb_build_object('id', c.id, 'maskedName', c.masked_name, 'city', c.city, 'state', c.state) AS customer,
         jsonb_build_object('id', v.id, 'model', v.model, 'variant', v.variant, 'modelYear', v.model_year) AS vehicle,
@@ -135,6 +150,7 @@ export async function getFeedbackRecordById(id: string) {
       LEFT JOIN vehicles v ON v.id = fr.vehicle_id
       LEFT JOIN job_cards jc ON jc.id = fr.job_card_id
       LEFT JOIN warranty_claims wc ON wc.id = fr.warranty_claim_id
+      LEFT JOIN nlp_results nr ON nr.feedback_record_id = fr.id
       WHERE fr.id = $1::uuid;
     `,
     [id]
