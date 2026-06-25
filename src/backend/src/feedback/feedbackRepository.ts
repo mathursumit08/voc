@@ -12,6 +12,7 @@ const allowedSourceTypes = new Set([
 ]);
 
 const allowedProcessingStatuses = new Set(["Pending", "Processing", "Completed", "Failed", "NeedsReview"]);
+const allowedUrgencyLevels = new Set(["Low", "Medium", "High", "Critical"]);
 
 export interface FeedbackFilters {
   sourceType?: string;
@@ -19,6 +20,7 @@ export interface FeedbackFilters {
   dealerId?: string;
   customerId?: string;
   vehicleId?: string;
+  urgencyLevel?: string;
   limit: number;
   offset: number;
 }
@@ -30,6 +32,10 @@ export function validateFeedbackFilters(filters: FeedbackFilters) {
 
   if (filters.processingStatus && !allowedProcessingStatuses.has(filters.processingStatus)) {
     throw new Error(`Invalid processingStatus filter: ${filters.processingStatus}`);
+  }
+
+  if (filters.urgencyLevel && !allowedUrgencyLevels.has(filters.urgencyLevel)) {
+    throw new Error(`Invalid urgencyLevel filter: ${filters.urgencyLevel}`);
   }
 }
 
@@ -64,6 +70,10 @@ export async function listFeedbackRecords(filters: FeedbackFilters) {
     addCondition("fr.vehicle_id = ?::uuid", filters.vehicleId);
   }
 
+  if (filters.urgencyLevel) {
+    addCondition("primary_issue.urgency_level = ?::\"UrgencyLevel\"", filters.urgencyLevel);
+  }
+
   values.push(filters.limit, filters.offset);
   const limitParam = `$${values.length - 1}`;
   const offsetParam = `$${values.length}`;
@@ -87,11 +97,14 @@ export async function listFeedbackRecords(filters: FeedbackFilters) {
         d.code AS "dealerCode",
         c.masked_name AS "customerName",
         v.model AS "vehicleModel",
+        primary_issue.category AS "issueCategory",
+        primary_issue.urgency_level AS "urgencyLevel",
         COUNT(*) OVER()::int AS "totalCount"
       FROM feedback_records fr
       LEFT JOIN dealers d ON d.id = fr.dealer_id
       LEFT JOIN customers c ON c.id = fr.customer_id
       LEFT JOIN vehicles v ON v.id = fr.vehicle_id
+      LEFT JOIN issue_classifications primary_issue ON primary_issue.feedback_record_id = fr.id AND primary_issue.is_primary = true
       ${whereClause}
       ORDER BY fr.feedback_date DESC, fr.created_at DESC
       LIMIT ${limitParam}
