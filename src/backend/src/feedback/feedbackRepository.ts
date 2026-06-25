@@ -139,6 +139,43 @@ export async function getFeedbackRecordById(id: string) {
             'processedAt', nr.processed_at
           )
         END AS "nlpResult",
+        COALESCE(
+          (
+            SELECT jsonb_agg(
+              jsonb_build_object(
+                'id', ic.id,
+                'category', ic.category,
+                'subCategory', ic.sub_category,
+                'urgencyLevel', ic.urgency_level,
+                'confidenceScore', ic.confidence_score,
+                'explanation', ic.explanation,
+                'isPrimary', ic.is_primary,
+                'createdAt', ic.created_at
+              )
+              ORDER BY ic.is_primary DESC, ic.created_at DESC
+            )
+            FROM issue_classifications ic
+            WHERE ic.feedback_record_id = fr.id
+          ),
+          '[]'::jsonb
+        ) AS "issueClassifications",
+        COALESCE(
+          (
+            SELECT jsonb_agg(
+              jsonb_build_object(
+                'id', hrq.id,
+                'status', hrq.status,
+                'reason', hrq.reason,
+                'assignedTo', hrq.assigned_to,
+                'createdAt', hrq.created_at
+              )
+              ORDER BY hrq.created_at DESC
+            )
+            FROM human_review_queue hrq
+            WHERE hrq.feedback_record_id = fr.id
+          ),
+          '[]'::jsonb
+        ) AS "reviewItems",
         jsonb_build_object('id', d.id, 'name', d.name, 'code', d.code, 'region', d.region) AS dealer,
         jsonb_build_object('id', c.id, 'maskedName', c.masked_name, 'city', c.city, 'state', c.state) AS customer,
         jsonb_build_object('id', v.id, 'model', v.model, 'variant', v.variant, 'modelYear', v.model_year) AS vehicle,

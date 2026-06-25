@@ -176,6 +176,25 @@ The batch endpoint accepts an optional JSON body:
 
 Feedback details include `nlpResult.sentimentLabel`, `nlpResult.sentimentScore`, `nlpResult.topics`, `nlpResult.confidenceScore`, and the NLP model source after processing runs.
 
+## Issue Classification
+
+VOC-009 issue classification maps feedback into the existing automotive `IssueCategory` taxonomy and stores the primary classification in `issue_classifications`. The prototype uses deterministic rules, stores confidence and explanation, and routes low-confidence classifications to `human_review_queue`.
+
+```text
+POST /api/v1/feedback/:id/issue-classification
+POST /api/v1/feedback/issue-classification/run
+```
+
+The batch endpoint accepts an optional JSON body:
+
+```json
+{
+  "limit": 25
+}
+```
+
+Feedback details include `issueClassifications` and `reviewItems` after classification runs.
+
 ## Important Development Rule
 
 Do not manually run database migration commands unless explicitly requested. Backend startup is configured to apply pending SQL migrations when `RUN_MIGRATIONS_ON_START=true`. See `AGENTS.md` for all project engineering guardrails.

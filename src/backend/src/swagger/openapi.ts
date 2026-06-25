@@ -350,6 +350,87 @@ export const openApiDocument = {
         }
       }
     },
+    "/feedback/issue-classification/run": {
+      post: {
+        tags: ["Feedback"],
+        summary: "Run issue classification for pending feedback",
+        description:
+          "Maps feedback into an automotive issue category. Low-confidence records are routed to the human review queue.",
+        operationId: "runPendingFeedbackIssueClassification",
+        requestBody: {
+          required: false,
+          content: {
+            "application/json": {
+              schema: {
+                type: "object",
+                properties: {
+                  limit: {
+                    type: "integer",
+                    minimum: 1,
+                    maximum: 100,
+                    default: 25
+                  }
+                }
+              }
+            }
+          }
+        },
+        responses: {
+          "200": {
+            description: "Issue classification completed",
+            content: {
+              "application/json": {
+                schema: {
+                  $ref: "#/components/schemas/IssueClassificationBatchResult"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/feedback/{id}/issue-classification": {
+      post: {
+        tags: ["Feedback"],
+        summary: "Run issue classification for one feedback record",
+        description:
+          "Classifies the primary automotive issue category and creates a review queue item when confidence is below the prototype threshold.",
+        operationId: "runFeedbackIssueClassification",
+        parameters: [
+          {
+            name: "id",
+            in: "path",
+            required: true,
+            schema: {
+              type: "string",
+              format: "uuid"
+            }
+          }
+        ],
+        responses: {
+          "200": {
+            description: "Issue classification result stored",
+            content: {
+              "application/json": {
+                schema: {
+                  $ref: "#/components/schemas/IssueClassificationResult"
+                }
+              }
+            }
+          },
+          "404": {
+            description: "Feedback record not found",
+            content: {
+              "application/json": {
+                schema: {
+                  $ref: "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/feedback/{id}": {
       get: {
         tags: ["Feedback"],
@@ -700,6 +781,168 @@ export const openApiDocument = {
           }
         }
       },
+      IssueClassificationResult: {
+        type: "object",
+        required: [
+          "feedbackRecordId",
+          "category",
+          "subCategory",
+          "urgencyLevel",
+          "confidenceScore",
+          "explanation",
+          "isPrimary",
+          "routedToReview",
+          "reviewQueueItemId"
+        ],
+        properties: {
+          feedbackRecordId: {
+            type: "string",
+            format: "uuid"
+          },
+          category: {
+            type: "string",
+            enum: [
+              "ServiceQuality",
+              "RepairQuality",
+              "StaffBehavior",
+              "PriceTransparency",
+              "PartsAvailability",
+              "WarrantyConcern",
+              "VehicleQuality",
+              "DeliveryDelay",
+              "FacilityExperience",
+              "DigitalExperience",
+              "Other"
+            ]
+          },
+          subCategory: {
+            type: "string",
+            example: "RepeatOrUnresolvedRepair"
+          },
+          urgencyLevel: {
+            type: "string",
+            enum: ["Low", "Medium", "High", "Critical"],
+            example: "Medium"
+          },
+          confidenceScore: {
+            type: "number",
+            format: "float",
+            minimum: 0,
+            maximum: 1,
+            example: 0.82
+          },
+          explanation: {
+            type: "string",
+            example: "The feedback refers to repair completion, repeat concern, or unresolved work."
+          },
+          isPrimary: {
+            type: "boolean",
+            example: true
+          },
+          routedToReview: {
+            type: "boolean",
+            example: false
+          },
+          reviewQueueItemId: {
+            type: "string",
+            format: "uuid",
+            nullable: true
+          }
+        }
+      },
+      IssueClassificationDetail: {
+        type: "object",
+        properties: {
+          id: {
+            type: "string",
+            format: "uuid"
+          },
+          category: {
+            type: "string",
+            enum: [
+              "ServiceQuality",
+              "RepairQuality",
+              "StaffBehavior",
+              "PriceTransparency",
+              "PartsAvailability",
+              "WarrantyConcern",
+              "VehicleQuality",
+              "DeliveryDelay",
+              "FacilityExperience",
+              "DigitalExperience",
+              "Other"
+            ]
+          },
+          subCategory: {
+            type: "string",
+            nullable: true
+          },
+          urgencyLevel: {
+            type: "string",
+            enum: ["Low", "Medium", "High", "Critical"]
+          },
+          confidenceScore: {
+            type: "number",
+            format: "float",
+            nullable: true
+          },
+          explanation: {
+            type: "string",
+            nullable: true
+          },
+          isPrimary: {
+            type: "boolean"
+          },
+          createdAt: {
+            type: "string",
+            format: "date-time"
+          }
+        }
+      },
+      IssueClassificationBatchResult: {
+        type: "object",
+        required: ["requestedLimit", "processedCount", "records"],
+        properties: {
+          requestedLimit: {
+            type: "integer",
+            example: 25
+          },
+          processedCount: {
+            type: "integer",
+            example: 16
+          },
+          records: {
+            type: "array",
+            items: {
+              $ref: "#/components/schemas/IssueClassificationResult"
+            }
+          }
+        }
+      },
+      ReviewQueueItem: {
+        type: "object",
+        properties: {
+          id: {
+            type: "string",
+            format: "uuid"
+          },
+          status: {
+            type: "string",
+            enum: ["Open", "InReview", "Resolved", "Dismissed"]
+          },
+          reason: {
+            type: "string"
+          },
+          assignedTo: {
+            type: "string",
+            nullable: true
+          },
+          createdAt: {
+            type: "string",
+            format: "date-time"
+          }
+        }
+      },
       LanguageProcessingResult: {
         type: "object",
         required: ["feedbackRecordId", "detectedLanguage", "translatedText", "confidenceScore", "processedText"],
@@ -787,6 +1030,18 @@ export const openApiDocument = {
               },
               nlpResult: {
                 $ref: "#/components/schemas/NlpResult"
+              },
+              issueClassifications: {
+                type: "array",
+                items: {
+                  $ref: "#/components/schemas/IssueClassificationDetail"
+                }
+              },
+              reviewItems: {
+                type: "array",
+                items: {
+                  $ref: "#/components/schemas/ReviewQueueItem"
+                }
               }
             }
           }
