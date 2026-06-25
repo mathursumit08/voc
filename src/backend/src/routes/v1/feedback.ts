@@ -16,9 +16,15 @@ feedbackRouter.get("/feedback", async (req, res, next) => {
       sourceType: req.query.sourceType?.toString(),
       processingStatus: req.query.processingStatus?.toString(),
       dealerId: req.query.dealerId?.toString(),
+      dealerName: req.query.dealerName?.toString(),
       customerId: req.query.customerId?.toString(),
       vehicleId: req.query.vehicleId?.toString(),
       urgencyLevel: req.query.urgencyLevel?.toString(),
+      sentimentLabel: req.query.sentimentLabel?.toString(),
+      issueCategory: req.query.issueCategory?.toString(),
+      vehicleModel: req.query.vehicleModel?.toString(),
+      dateFrom: req.query.dateFrom?.toString(),
+      dateTo: req.query.dateTo?.toString(),
       limit: Number.isFinite(limit) && limit > 0 ? limit : 50,
       offset: Number.isFinite(offset) && offset >= 0 ? offset : 0
     });

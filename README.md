@@ -123,7 +123,7 @@ GET /api/v1/feedback/:id
 The list endpoint supports these filters:
 
 ```text
-sourceType, processingStatus, dealerId, customerId, vehicleId, urgencyLevel, limit, offset
+sourceType, processingStatus, dealerId, dealerName, customerId, vehicleId, vehicleModel, dateFrom, dateTo, sentimentLabel, issueCategory, urgencyLevel, limit, offset
 ```
 
 Supported `sourceType` values:
@@ -213,6 +213,10 @@ The batch endpoint accepts an optional JSON body:
 ```
 
 Critical feedback is flagged with `isCritical: true` in the urgency response and `urgencyLevel: Critical` in feedback list/detail data.
+
+## Feedback Explorer UI
+
+VOC-011 adds a frontend feedback workspace available from the top menu. The workspace contains feedback upload and feedback explorer on a separate page from the command center. It loads `GET /api/v1/feedback`, supports source, dealer, model, date range, sentiment, issue, urgency filters, and paginated list navigation using `limit` and `offset`. It opens `GET /api/v1/feedback/:id` details with raw text, masked text, translated text, sentiment, topics, issue classification, and related review items.
 
 ## Important Development Rule
 

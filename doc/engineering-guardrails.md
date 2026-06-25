@@ -24,6 +24,7 @@ src/backend/data/
 All standalone SQL scripts must go in `src/backend/data/scripts`.
 
 10. Version all APIs under `/api/v1`.
+11. Paginate frontend pages or panels that display record lists by default. Only omit pagination when explicitly requested or when the list is a fixed, tiny static summary.
 
 ## Recommended Enforcement Points
 

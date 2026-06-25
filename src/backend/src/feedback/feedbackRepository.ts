@@ -13,14 +13,34 @@ const allowedSourceTypes = new Set([
 
 const allowedProcessingStatuses = new Set(["Pending", "Processing", "Completed", "Failed", "NeedsReview"]);
 const allowedUrgencyLevels = new Set(["Low", "Medium", "High", "Critical"]);
+const allowedSentimentLabels = new Set(["Positive", "Neutral", "Negative", "Mixed", "Unknown"]);
+const allowedIssueCategories = new Set([
+  "ServiceQuality",
+  "RepairQuality",
+  "StaffBehavior",
+  "PriceTransparency",
+  "PartsAvailability",
+  "WarrantyConcern",
+  "VehicleQuality",
+  "DeliveryDelay",
+  "FacilityExperience",
+  "DigitalExperience",
+  "Other"
+]);
 
 export interface FeedbackFilters {
   sourceType?: string;
   processingStatus?: string;
   dealerId?: string;
+  dealerName?: string;
   customerId?: string;
   vehicleId?: string;
   urgencyLevel?: string;
+  sentimentLabel?: string;
+  issueCategory?: string;
+  vehicleModel?: string;
+  dateFrom?: string;
+  dateTo?: string;
   limit: number;
   offset: number;
 }
@@ -36,6 +56,14 @@ export function validateFeedbackFilters(filters: FeedbackFilters) {
 
   if (filters.urgencyLevel && !allowedUrgencyLevels.has(filters.urgencyLevel)) {
     throw new Error(`Invalid urgencyLevel filter: ${filters.urgencyLevel}`);
+  }
+
+  if (filters.sentimentLabel && !allowedSentimentLabels.has(filters.sentimentLabel)) {
+    throw new Error(`Invalid sentimentLabel filter: ${filters.sentimentLabel}`);
+  }
+
+  if (filters.issueCategory && !allowedIssueCategories.has(filters.issueCategory)) {
+    throw new Error(`Invalid issueCategory filter: ${filters.issueCategory}`);
   }
 }
 
@@ -62,6 +90,10 @@ export async function listFeedbackRecords(filters: FeedbackFilters) {
     addCondition("fr.dealer_id = ?::uuid", filters.dealerId);
   }
 
+  if (filters.dealerName) {
+    addCondition("d.name ILIKE '%' || ? || '%'", filters.dealerName);
+  }
+
   if (filters.customerId) {
     addCondition("fr.customer_id = ?::uuid", filters.customerId);
   }
@@ -72,6 +104,26 @@ export async function listFeedbackRecords(filters: FeedbackFilters) {
 
   if (filters.urgencyLevel) {
     addCondition("primary_issue.urgency_level = ?::\"UrgencyLevel\"", filters.urgencyLevel);
+  }
+
+  if (filters.sentimentLabel) {
+    addCondition("nr.sentiment_label = ?::\"SentimentLabel\"", filters.sentimentLabel);
+  }
+
+  if (filters.issueCategory) {
+    addCondition("primary_issue.category = ?::\"IssueCategory\"", filters.issueCategory);
+  }
+
+  if (filters.vehicleModel) {
+    addCondition("v.model ILIKE '%' || ? || '%'", filters.vehicleModel);
+  }
+
+  if (filters.dateFrom) {
+    addCondition("fr.feedback_date >= ?::timestamptz", filters.dateFrom);
+  }
+
+  if (filters.dateTo) {
+    addCondition("fr.feedback_date <= ?::timestamptz", filters.dateTo);
   }
 
   values.push(filters.limit, filters.offset);
@@ -97,6 +149,8 @@ export async function listFeedbackRecords(filters: FeedbackFilters) {
         d.code AS "dealerCode",
         c.masked_name AS "customerName",
         v.model AS "vehicleModel",
+        nr.sentiment_label AS "sentimentLabel",
+        nr.topics,
         primary_issue.category AS "issueCategory",
         primary_issue.urgency_level AS "urgencyLevel",
         COUNT(*) OVER()::int AS "totalCount"
@@ -104,6 +158,7 @@ export async function listFeedbackRecords(filters: FeedbackFilters) {
       LEFT JOIN dealers d ON d.id = fr.dealer_id
       LEFT JOIN customers c ON c.id = fr.customer_id
       LEFT JOIN vehicles v ON v.id = fr.vehicle_id
+      LEFT JOIN nlp_results nr ON nr.feedback_record_id = fr.id
       LEFT JOIN issue_classifications primary_issue ON primary_issue.feedback_record_id = fr.id AND primary_issue.is_primary = true
       ${whereClause}
       ORDER BY fr.feedback_date DESC, fr.created_at DESC
