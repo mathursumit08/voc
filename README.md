@@ -123,7 +123,7 @@ GET /api/v1/feedback/:id
 The list endpoint supports these filters:
 
 ```text
-sourceType, processingStatus, dealerId, customerId, vehicleId, limit, offset
+sourceType, processingStatus, dealerId, customerId, vehicleId, urgencyLevel, limit, offset
 ```
 
 Supported `sourceType` values:
@@ -194,6 +194,25 @@ The batch endpoint accepts an optional JSON body:
 ```
 
 Feedback details include `issueClassifications` and `reviewItems` after classification runs.
+
+## Urgency Scoring
+
+VOC-010 urgency scoring calculates a 0-100 prototype score from sentiment, primary issue category, repeat complaints in the previous 90 days, and severity keywords. The score is returned by the API, and the resulting `urgencyLevel` is stored on the primary issue classification for dashboard and feedback explorer filtering.
+
+```text
+POST /api/v1/feedback/:id/urgency
+POST /api/v1/feedback/urgency/run
+```
+
+The batch endpoint accepts an optional JSON body:
+
+```json
+{
+  "limit": 25
+}
+```
+
+Critical feedback is flagged with `isCritical: true` in the urgency response and `urgencyLevel: Critical` in feedback list/detail data.
 
 ## Important Development Rule
 

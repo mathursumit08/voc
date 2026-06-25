@@ -145,6 +145,14 @@ export const openApiDocument = {
             }
           },
           {
+            name: "urgencyLevel",
+            in: "query",
+            schema: {
+              type: "string",
+              enum: ["Low", "Medium", "High", "Critical"]
+            }
+          },
+          {
             name: "limit",
             in: "query",
             schema: {
@@ -431,6 +439,87 @@ export const openApiDocument = {
         }
       }
     },
+    "/feedback/urgency/run": {
+      post: {
+        tags: ["Feedback"],
+        summary: "Run urgency scoring for pending feedback",
+        description:
+          "Calculates urgency from sentiment, primary issue category, repeat complaints in the last 90 days, and severity keywords. The resulting urgency level is stored on the primary issue classification.",
+        operationId: "runPendingFeedbackUrgency",
+        requestBody: {
+          required: false,
+          content: {
+            "application/json": {
+              schema: {
+                type: "object",
+                properties: {
+                  limit: {
+                    type: "integer",
+                    minimum: 1,
+                    maximum: 100,
+                    default: 25
+                  }
+                }
+              }
+            }
+          }
+        },
+        responses: {
+          "200": {
+            description: "Urgency scoring completed",
+            content: {
+              "application/json": {
+                schema: {
+                  $ref: "#/components/schemas/UrgencyBatchResult"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/feedback/{id}/urgency": {
+      post: {
+        tags: ["Feedback"],
+        summary: "Run urgency scoring for one feedback record",
+        description:
+          "Calculates urgency score, stores the urgency level, and clearly flags critical feedback.",
+        operationId: "runFeedbackUrgency",
+        parameters: [
+          {
+            name: "id",
+            in: "path",
+            required: true,
+            schema: {
+              type: "string",
+              format: "uuid"
+            }
+          }
+        ],
+        responses: {
+          "200": {
+            description: "Urgency result stored",
+            content: {
+              "application/json": {
+                schema: {
+                  $ref: "#/components/schemas/UrgencyProcessingResult"
+                }
+              }
+            }
+          },
+          "404": {
+            description: "Feedback record not found",
+            content: {
+              "application/json": {
+                schema: {
+                  $ref: "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/feedback/{id}": {
       get: {
         tags: ["Feedback"],
@@ -630,6 +719,28 @@ export const openApiDocument = {
           vehicleModel: {
             type: "string",
             nullable: true
+          },
+          issueCategory: {
+            type: "string",
+            nullable: true,
+            enum: [
+              "ServiceQuality",
+              "RepairQuality",
+              "StaffBehavior",
+              "PriceTransparency",
+              "PartsAvailability",
+              "WarrantyConcern",
+              "VehicleQuality",
+              "DeliveryDelay",
+              "FacilityExperience",
+              "DigitalExperience",
+              "Other"
+            ]
+          },
+          urgencyLevel: {
+            type: "string",
+            nullable: true,
+            enum: ["Low", "Medium", "High", "Critical"]
           }
         }
       },
@@ -940,6 +1051,62 @@ export const openApiDocument = {
           createdAt: {
             type: "string",
             format: "date-time"
+          }
+        }
+      },
+      UrgencyProcessingResult: {
+        type: "object",
+        required: ["feedbackRecordId", "urgencyScore", "urgencyLevel", "isCritical", "repeatComplaintCount", "factors"],
+        properties: {
+          feedbackRecordId: {
+            type: "string",
+            format: "uuid"
+          },
+          urgencyScore: {
+            type: "integer",
+            minimum: 0,
+            maximum: 100,
+            example: 82
+          },
+          urgencyLevel: {
+            type: "string",
+            enum: ["Low", "Medium", "High", "Critical"],
+            example: "Critical"
+          },
+          isCritical: {
+            type: "boolean",
+            example: true
+          },
+          repeatComplaintCount: {
+            type: "integer",
+            example: 2
+          },
+          factors: {
+            type: "array",
+            items: {
+              type: "string"
+            },
+            example: ["sentiment=Negative +28", "issue=RepairQuality +20", "severityKeywords +22"]
+          }
+        }
+      },
+      UrgencyBatchResult: {
+        type: "object",
+        required: ["requestedLimit", "processedCount", "records"],
+        properties: {
+          requestedLimit: {
+            type: "integer",
+            example: 25
+          },
+          processedCount: {
+            type: "integer",
+            example: 16
+          },
+          records: {
+            type: "array",
+            items: {
+              $ref: "#/components/schemas/UrgencyProcessingResult"
+            }
           }
         }
       },

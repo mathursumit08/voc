@@ -3,6 +3,7 @@ import { getFeedbackRecordById, listFeedbackRecords } from "../../feedback/feedb
 import { processFeedbackIssueClassification, processPendingFeedbackIssueClassifications } from "../../nlp/issueClassificationService.js";
 import { processFeedbackLanguage, processPendingFeedbackLanguages } from "../../nlp/languageService.js";
 import { processFeedbackSentimentTopics, processPendingFeedbackSentimentTopics } from "../../nlp/sentimentTopicService.js";
+import { processFeedbackUrgency, processPendingFeedbackUrgency } from "../../nlp/urgencyService.js";
 
 export const feedbackRouter = Router();
 
@@ -17,6 +18,7 @@ feedbackRouter.get("/feedback", async (req, res, next) => {
       dealerId: req.query.dealerId?.toString(),
       customerId: req.query.customerId?.toString(),
       vehicleId: req.query.vehicleId?.toString(),
+      urgencyLevel: req.query.urgencyLevel?.toString(),
       limit: Number.isFinite(limit) && limit > 0 ? limit : 50,
       offset: Number.isFinite(offset) && offset >= 0 ? offset : 0
     });
@@ -93,6 +95,32 @@ feedbackRouter.post("/feedback/issue-classification/run", async (req, res, next)
 feedbackRouter.post("/feedback/:id/issue-classification", async (req, res, next) => {
   try {
     const result = await processFeedbackIssueClassification(req.params.id);
+
+    if (!result) {
+      res.status(404).json({ message: "Feedback record not found." });
+      return;
+    }
+
+    res.json(result);
+  } catch (error) {
+    next(error);
+  }
+});
+
+feedbackRouter.post("/feedback/urgency/run", async (req, res, next) => {
+  try {
+    const limit = Number(req.body?.limit ?? req.query.limit ?? 25);
+    const result = await processPendingFeedbackUrgency(Number.isFinite(limit) ? limit : 25);
+
+    res.json(result);
+  } catch (error) {
+    next(error);
+  }
+});
+
+feedbackRouter.post("/feedback/:id/urgency", async (req, res, next) => {
+  try {
+    const result = await processFeedbackUrgency(req.params.id);
 
     if (!result) {
       res.status(404).json({ message: "Feedback record not found." });
