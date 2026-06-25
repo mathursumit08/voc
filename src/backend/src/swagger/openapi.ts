@@ -25,6 +25,10 @@ export const openApiDocument = {
     {
       name: "Feedback",
       description: "Normalized feedback record exploration endpoints"
+    },
+    {
+      name: "Dashboard",
+      description: "Executive and operational dashboard endpoints"
     }
   ],
   paths: {
@@ -40,6 +44,27 @@ export const openApiDocument = {
               "application/json": {
                 schema: {
                   $ref: "#/components/schemas/HealthResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/dashboard/executive": {
+      get: {
+        tags: ["Dashboard"],
+        summary: "Get executive VoC dashboard summary",
+        description:
+          "Returns sentiment distribution, top issue categories, dealer comparison, and risk counts for the OEM executive command center.",
+        operationId: "getExecutiveDashboard",
+        responses: {
+          "200": {
+            description: "Executive dashboard summary returned",
+            content: {
+              "application/json": {
+                schema: {
+                  $ref: "#/components/schemas/ExecutiveDashboardSummary"
                 }
               }
             }
@@ -658,6 +683,113 @@ export const openApiDocument = {
           timestamp: {
             type: "string",
             format: "date-time"
+          }
+        }
+      },
+      DashboardCount: {
+        type: "object",
+        required: ["label", "count"],
+        properties: {
+          label: {
+            type: "string"
+          },
+          count: {
+            type: "integer",
+            example: 12
+          }
+        }
+      },
+      DealerDashboardSummary: {
+        type: "object",
+        required: ["dealerId", "dealerName", "dealerCode", "region", "openEscalations", "feedbackCount"],
+        properties: {
+          dealerId: {
+            type: "string",
+            format: "uuid"
+          },
+          dealerName: {
+            type: "string"
+          },
+          dealerCode: {
+            type: "string"
+          },
+          region: {
+            type: "string"
+          },
+          csiScore: {
+            type: "number",
+            nullable: true
+          },
+          npsScore: {
+            type: "number",
+            nullable: true
+          },
+          sentimentScore: {
+            type: "number",
+            nullable: true
+          },
+          openEscalations: {
+            type: "integer"
+          },
+          feedbackCount: {
+            type: "integer"
+          }
+        }
+      },
+      ExecutiveDashboardSummary: {
+        type: "object",
+        required: [
+          "totalFeedback",
+          "positiveFeedback",
+          "negativeFeedback",
+          "criticalFeedback",
+          "openWarrantySignals",
+          "sentimentDistribution",
+          "topIssueCategories",
+          "dealerComparison"
+        ],
+        properties: {
+          totalFeedback: {
+            type: "integer"
+          },
+          positiveFeedback: {
+            type: "integer"
+          },
+          negativeFeedback: {
+            type: "integer"
+          },
+          criticalFeedback: {
+            type: "integer"
+          },
+          openWarrantySignals: {
+            type: "integer"
+          },
+          sentimentDistribution: {
+            type: "array",
+            items: {
+              $ref: "#/components/schemas/DashboardCount"
+            }
+          },
+          topIssueCategories: {
+            type: "array",
+            items: {
+              type: "object",
+              required: ["category", "count"],
+              properties: {
+                category: {
+                  type: "string"
+                },
+                count: {
+                  type: "integer"
+                }
+              }
+            }
+          },
+          dealerComparison: {
+            type: "array",
+            items: {
+              $ref: "#/components/schemas/DealerDashboardSummary"
+            }
           }
         }
       },

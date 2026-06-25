@@ -214,6 +214,16 @@ The batch endpoint accepts an optional JSON body:
 
 Critical feedback is flagged with `isCritical: true` in the urgency response and `urgencyLevel: Critical` in feedback list/detail data.
 
+## Executive Dashboard
+
+VOC-012 adds a data-backed OEM executive dashboard endpoint and exposes it through a separate Executive Dashboard page in the top menu. The main Command Center page remains the general dashboard shell for later wiring.
+
+```text
+GET /api/v1/dashboard/executive
+```
+
+The dashboard shows sentiment distribution, top issue categories, dealer comparison, critical feedback count, and open warranty signal count.
+
 ## Feedback Explorer UI
 
 VOC-011 adds a frontend feedback workspace available from the top menu. The workspace contains feedback upload and feedback explorer on a separate page from the command center. It loads `GET /api/v1/feedback`, supports source, dealer, model, date range, sentiment, issue, urgency filters, and paginated list navigation using `limit` and `offset`. It opens `GET /api/v1/feedback/:id` details with raw text, masked text, translated text, sentiment, topics, issue classification, and related review items.
