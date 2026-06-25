@@ -55,6 +55,10 @@ src/backend/data/
     - Route pattern: `/api/v1/...`.
     - Do not introduce unversioned `/api/...` routes.
 
+11. **Paginate list pages by default.**
+    - Any frontend page or panel that displays a record list must include pagination controls.
+    - Only omit pagination when the user explicitly asks for no pagination or the list is a fixed, tiny static UI element such as a top-five summary.
+
 ## Before Making Changes
 
 - Check whether the change touches database schemas, migrations, environment keys, API contracts, Swagger/OpenAPI docs, or Docker files.

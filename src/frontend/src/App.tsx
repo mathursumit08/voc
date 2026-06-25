@@ -1,7 +1,7 @@
-import { useState } from "react";
-import { AlertTriangle, Bell, Car, LineChart, Search, Sparkles, TrendingUp, UploadCloud } from "lucide-react";
+import { useEffect, useState } from "react";
+import { AlertTriangle, Bell, Car, Filter, LineChart, RefreshCw, Search, Sparkles, TrendingUp, UploadCloud } from "lucide-react";
 import type { ReactNode } from "react";
-import { MetricCard } from "./components/MetricCard";
+import { MetricCard } from "./components/MetricCard.js";
 
 const metrics = [
   { label: "CSI Score", value: "847", suffix: "/1000", accent: "blue", trend: "+2.4%" },
@@ -9,14 +9,102 @@ const metrics = [
   { label: "Sentiment Score", value: "76.3%", suffix: "positive", accent: "green", trend: "+1.8%" },
   { label: "Customer Retention", value: "68.4%", suffix: "retained", accent: "amber", trend: "-1.2%" },
   { label: "Open Escalations", value: "247", suffix: "active", accent: "danger", trend: "+34" }
-];
+] as const;
 
 const dealers = ["AutoTech Motors", "Prestige AutoHouse", "Capital Auto Hub", "Sunrise Motors", "Elite Autoworks"];
+const apiBaseUrl = import.meta.env.VITE_API_BASE_URL;
+
+const sourceTypes = ["Survey", "JobCard", "WarrantyClaim", "GoogleReview", "SocialMedia", "CallCenter", "MobileApp", "ManualUpload"];
+const sentimentLabels = ["Positive", "Neutral", "Negative", "Mixed", "Unknown"];
+const issueCategories = [
+  "ServiceQuality",
+  "RepairQuality",
+  "StaffBehavior",
+  "PriceTransparency",
+  "PartsAvailability",
+  "WarrantyConcern",
+  "VehicleQuality",
+  "DeliveryDelay",
+  "FacilityExperience",
+  "DigitalExperience",
+  "Other"
+];
+const urgencyLevels = ["Low", "Medium", "High", "Critical"];
+const pageSizeOptions = [10, 25, 50, 100];
+
+interface FeedbackSummary {
+  id: string;
+  sourceType: string;
+  sourceReferenceId: string;
+  feedbackDate: string;
+  rawText: string;
+  maskedText: string | null;
+  rating: number | null;
+  processingStatus: string;
+  dealerName: string | null;
+  dealerCode: string | null;
+  customerName: string | null;
+  vehicleModel: string | null;
+  sentimentLabel: string | null;
+  topics: string[] | null;
+  issueCategory: string | null;
+  urgencyLevel: string | null;
+}
+
+interface FeedbackDetail extends FeedbackSummary {
+  nlpResult: {
+    detectedLanguage?: string;
+    translatedText?: string | null;
+    sentimentLabel?: string;
+    sentimentScore?: number | null;
+    topics?: string[] | null;
+    confidenceScore?: number | null;
+    modelName?: string | null;
+    modelVersion?: string | null;
+  } | null;
+  issueClassifications: Array<{
+    id: string;
+    category: string;
+    subCategory: string | null;
+    urgencyLevel: string;
+    confidenceScore: number | null;
+    explanation: string | null;
+    isPrimary: boolean;
+  }>;
+  reviewItems: Array<{
+    id: string;
+    status: string;
+    reason: string;
+    assignedTo: string | null;
+  }>;
+}
+
+interface FeedbackListResponse {
+  totalCount: number;
+  limit: number;
+  offset: number;
+  records: FeedbackSummary[];
+}
+
+interface ExplorerFilters {
+  sourceType: string;
+  dealerName: string;
+  sentimentLabel: string;
+  issueCategory: string;
+  urgencyLevel: string;
+  vehicleModel: string;
+  dateFrom: string;
+  dateTo: string;
+}
+
+type AppPage = "dashboard" | "feedback";
 
 export function App() {
+  const [activePage, setActivePage] = useState<AppPage>("dashboard");
+
   return (
     <main className="min-h-screen bg-slate-100 text-slate-950">
-      <header className="flex items-center justify-between bg-command-navy px-8 py-4 text-white shadow-card">
+      <header className="flex flex-wrap items-center justify-between gap-4 bg-command-navy px-8 py-4 text-white shadow-card">
         <div className="flex items-center gap-4">
           <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-blue-600 shadow-lg">
             <Car size={24} />
@@ -26,9 +114,13 @@ export function App() {
             <h1 className="text-lg font-bold">Customer Experience Command Center</h1>
           </div>
         </div>
-        <nav className="hidden items-center gap-3 lg:flex">
-          <button className="rounded-lg border border-blue-400/40 bg-blue-600/20 px-4 py-2 text-sm text-blue-100">Command Center</button>
-          <button className="px-4 py-2 text-sm text-slate-400">Voice Analytics</button>
+        <nav className="order-3 flex w-full items-center gap-3 lg:order-none lg:w-auto">
+          <MenuButton active={activePage === "dashboard"} onClick={() => setActivePage("dashboard")}>
+            Command Center
+          </MenuButton>
+          <MenuButton active={activePage === "feedback"} onClick={() => setActivePage("feedback")}>
+            Feedback Workspace
+          </MenuButton>
         </nav>
         <div className="flex items-center gap-3">
           <div className="hidden items-center gap-2 rounded-xl border border-white/10 bg-white/10 px-4 py-2 text-sm text-slate-300 md:flex">
@@ -43,7 +135,28 @@ export function App() {
         </div>
       </header>
 
-      <section className="grid gap-6 p-6 xl:grid-cols-[1fr_320px]">
+      {activePage === "dashboard" ? <DashboardPage /> : <FeedbackWorkspacePage />}
+    </main>
+  );
+}
+
+function MenuButton({ active, children, onClick }: { active: boolean; children: ReactNode; onClick: () => void }) {
+  return (
+    <button
+      className={`rounded-lg px-4 py-2 text-sm ${
+        active ? "border border-blue-400/40 bg-blue-600/20 text-blue-100" : "text-slate-400 hover:bg-white/5 hover:text-slate-200"
+      }`}
+      type="button"
+      onClick={onClick}
+    >
+      {children}
+    </button>
+  );
+}
+
+function DashboardPage() {
+  return (
+    <section className="grid gap-6 p-6 xl:grid-cols-[1fr_320px]">
         <div className="space-y-6">
           <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-5">
             {metrics.map((metric) => (
@@ -79,10 +192,10 @@ export function App() {
               </div>
             </DashboardPanel>
           </div>
+
         </div>
 
         <aside className="space-y-4">
-          <FeedbackUploadCard />
           <div className="rounded-2xl bg-white p-5 shadow-card">
             <div className="mb-4 flex items-center gap-3">
               <span className="rounded-xl bg-indigo-100 p-2 text-indigo-600"><Sparkles size={20} /></span>
@@ -110,7 +223,31 @@ export function App() {
           </div>
         </aside>
       </section>
-    </main>
+  );
+}
+
+function FeedbackWorkspacePage() {
+  return (
+    <section className="space-y-6 p-6">
+      <div className="rounded-2xl bg-white p-5 shadow-card">
+        <div className="flex flex-wrap items-center justify-between gap-4">
+          <div>
+            <p className="text-xs font-black uppercase tracking-[0.18em] text-blue-600">Feedback Workspace</p>
+            <h2 className="text-2xl font-black text-slate-950">Upload And Explore Feedback</h2>
+            <p className="mt-1 text-sm text-slate-500">Load prototype feedback files, then inspect normalized records and NLP outputs from one workspace.</p>
+          </div>
+          <div className="flex items-center gap-2 rounded-xl bg-blue-50 px-3 py-2 text-sm font-bold text-blue-700">
+            <UploadCloud size={18} />
+            Accepted: .csv, .xlsx
+          </div>
+        </div>
+      </div>
+
+      <div className="grid gap-6 xl:grid-cols-[360px_1fr]">
+        <FeedbackUploadCard />
+        <FeedbackExplorer />
+      </div>
+    </section>
   );
 }
 
@@ -120,6 +257,385 @@ interface UploadResult {
   rejectedRows: number;
   duplicateRows: number;
   insertedRows: number;
+}
+
+function FeedbackExplorer() {
+  const [filters, setFilters] = useState<ExplorerFilters>({
+    sourceType: "",
+    dealerName: "",
+    sentimentLabel: "",
+    issueCategory: "",
+    urgencyLevel: "",
+    vehicleModel: "",
+    dateFrom: "",
+    dateTo: ""
+  });
+  const [records, setRecords] = useState<FeedbackSummary[]>([]);
+  const [selectedFeedbackId, setSelectedFeedbackId] = useState<string | null>(null);
+  const [selectedFeedback, setSelectedFeedback] = useState<FeedbackDetail | null>(null);
+  const [totalCount, setTotalCount] = useState(0);
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(25);
+  const [isLoading, setIsLoading] = useState(false);
+  const [isDetailLoading, setIsDetailLoading] = useState(false);
+  const [message, setMessage] = useState("Loading feedback records...");
+
+  async function loadFeedback() {
+    const offset = (page - 1) * pageSize;
+    const params = new URLSearchParams({ limit: String(pageSize), offset: String(offset) });
+
+    Object.entries(filters).forEach(([key, value]) => {
+      if (value) {
+        params.set(key, value);
+      }
+    });
+
+    setIsLoading(true);
+
+    try {
+      const response = await fetch(`${apiBaseUrl}/feedback?${params.toString()}`);
+      const payload = (await response.json()) as FeedbackListResponse;
+
+      if (!response.ok) {
+        throw new Error("Could not load feedback records.");
+      }
+
+      setRecords(payload.records);
+      setTotalCount(payload.totalCount);
+      setMessage(payload.records.length > 0 ? `${payload.totalCount} feedback records found.` : "No feedback found for the selected filters.");
+    } catch (error) {
+      setRecords([]);
+      setTotalCount(0);
+      setMessage(error instanceof Error ? error.message : "Could not load feedback records.");
+    } finally {
+      setIsLoading(false);
+    }
+  }
+
+  async function openFeedbackDetail(feedbackId: string) {
+    setSelectedFeedbackId(feedbackId);
+    setSelectedFeedback(null);
+    setIsDetailLoading(true);
+
+    try {
+      const response = await fetch(`${apiBaseUrl}/feedback/${feedbackId}`);
+      const payload = (await response.json()) as FeedbackDetail;
+
+      if (!response.ok) {
+        throw new Error("Could not open feedback detail.");
+      }
+
+      setSelectedFeedback(payload);
+    } catch {
+      setSelectedFeedback(null);
+    } finally {
+      setIsDetailLoading(false);
+    }
+  }
+
+  function updateFilter(key: keyof ExplorerFilters, value: string) {
+    setPage(1);
+    setSelectedFeedbackId(null);
+    setSelectedFeedback(null);
+    setFilters((currentFilters) => ({ ...currentFilters, [key]: value }));
+  }
+
+  function clearFilters() {
+    setPage(1);
+    setSelectedFeedbackId(null);
+    setSelectedFeedback(null);
+    setFilters({
+      sourceType: "",
+      dealerName: "",
+      sentimentLabel: "",
+      issueCategory: "",
+      urgencyLevel: "",
+      vehicleModel: "",
+      dateFrom: "",
+      dateTo: ""
+    });
+  }
+
+  useEffect(() => {
+    void loadFeedback();
+  }, [filters, page, pageSize]);
+
+  const totalPages = Math.max(Math.ceil(totalCount / pageSize), 1);
+  const firstRecordIndex = totalCount === 0 ? 0 : (page - 1) * pageSize + 1;
+  const lastRecordIndex = Math.min(page * pageSize, totalCount);
+
+  return (
+    <section className="rounded-2xl bg-white p-5 shadow-card">
+      <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <div className="flex items-center gap-2">
+            <span className="rounded-lg bg-blue-50 p-2 text-blue-600">
+              <Filter size={18} />
+            </span>
+            <h2 className="text-lg font-bold">Feedback Explorer</h2>
+          </div>
+          <p className="mt-1 text-sm text-slate-500">Search and inspect customer comments across source, model, sentiment, issue, and urgency.</p>
+        </div>
+        <button
+          className="inline-flex items-center gap-2 rounded-xl border border-slate-200 px-3 py-2 text-sm font-bold text-slate-600 hover:bg-slate-50"
+          type="button"
+          onClick={() => void loadFeedback()}
+        >
+          <RefreshCw size={16} className={isLoading ? "animate-spin" : ""} />
+          Refresh
+        </button>
+      </div>
+
+      <div className="mb-4 grid gap-3 md:grid-cols-2 xl:grid-cols-8">
+        <FilterSelect label="Source" value={filters.sourceType} values={sourceTypes} onChange={(value) => updateFilter("sourceType", value)} />
+        <FilterInput label="Dealer" value={filters.dealerName} placeholder="e.g. AutoTech" onChange={(value) => updateFilter("dealerName", value)} />
+        <FilterSelect label="Sentiment" value={filters.sentimentLabel} values={sentimentLabels} onChange={(value) => updateFilter("sentimentLabel", value)} />
+        <FilterSelect label="Issue" value={filters.issueCategory} values={issueCategories} onChange={(value) => updateFilter("issueCategory", value)} />
+        <FilterSelect label="Urgency" value={filters.urgencyLevel} values={urgencyLevels} onChange={(value) => updateFilter("urgencyLevel", value)} />
+        <FilterInput label="Model" value={filters.vehicleModel} placeholder="e.g. Nexon" onChange={(value) => updateFilter("vehicleModel", value)} />
+        <FilterInput label="From" value={filters.dateFrom} type="date" onChange={(value) => updateFilter("dateFrom", value)} />
+        <FilterInput label="To" value={filters.dateTo} type="date" onChange={(value) => updateFilter("dateTo", value)} />
+      </div>
+
+      <div className="mb-4 flex items-center justify-between gap-3 rounded-xl bg-slate-50 px-4 py-3 text-sm">
+        <span className="font-semibold text-slate-600">{message}</span>
+        <button className="text-sm font-bold text-blue-600" type="button" onClick={clearFilters}>
+          Clear filters
+        </button>
+      </div>
+
+      <div className="grid gap-4 2xl:grid-cols-[1fr_420px]">
+        <div className="overflow-hidden rounded-xl border border-slate-100">
+          <div className="grid grid-cols-[1.2fr_0.8fr_0.8fr_0.8fr_0.8fr] bg-slate-50 px-4 py-3 text-xs font-black uppercase tracking-wide text-slate-400">
+            <span>Feedback</span>
+            <span>Dealer / Model</span>
+            <span>Sentiment</span>
+            <span>Issue</span>
+            <span>Urgency</span>
+          </div>
+          {records.map((record) => (
+            <button
+              key={record.id}
+              className={`grid w-full grid-cols-[1.2fr_0.8fr_0.8fr_0.8fr_0.8fr] gap-3 border-t border-slate-100 px-4 py-4 text-left text-sm hover:bg-blue-50/60 ${
+                selectedFeedbackId === record.id ? "bg-blue-50" : "bg-white"
+              }`}
+              type="button"
+              onClick={() => void openFeedbackDetail(record.id)}
+            >
+              <span>
+                <span className="block font-bold text-slate-950">{record.sourceReferenceId}</span>
+                <span className="line-clamp-2 text-slate-500">{record.maskedText ?? record.rawText}</span>
+              </span>
+              <span className="text-slate-600">
+                <span className="block font-semibold">{record.dealerName ?? "Unassigned"}</span>
+                <span className="text-xs text-slate-400">{record.vehicleModel ?? "Model N/A"}</span>
+              </span>
+              <Badge tone={sentimentTone(record.sentimentLabel)}>{record.sentimentLabel ?? "Pending"}</Badge>
+              <span className="font-semibold text-slate-700">{record.issueCategory ?? "Unclassified"}</span>
+              <Badge tone={urgencyTone(record.urgencyLevel)}>{record.urgencyLevel ?? "Pending"}</Badge>
+            </button>
+          ))}
+          {records.length === 0 ? (
+            <div className="px-4 py-10 text-center text-sm font-semibold text-slate-500">
+              {isLoading ? "Loading feedback..." : "No records to show."}
+            </div>
+          ) : null}
+        </div>
+
+        <FeedbackDetailPanel feedback={selectedFeedback} isLoading={isDetailLoading} totalCount={totalCount} />
+      </div>
+
+      <div className="mt-4 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-slate-100 px-4 py-3 text-sm">
+        <span className="font-semibold text-slate-600">
+          Showing {firstRecordIndex}-{lastRecordIndex} of {totalCount}
+        </span>
+        <div className="flex flex-wrap items-center gap-3">
+          <label className="flex items-center gap-2 text-xs font-bold uppercase tracking-wide text-slate-400">
+            Rows
+            <select
+              className="rounded-lg border border-slate-200 bg-white px-2 py-1.5 text-sm font-semibold text-slate-700"
+              value={pageSize}
+              onChange={(event) => {
+                setPage(1);
+                setPageSize(Number(event.target.value));
+              }}
+            >
+              {pageSizeOptions.map((option) => (
+                <option key={option} value={option}>
+                  {option}
+                </option>
+              ))}
+            </select>
+          </label>
+          <span className="font-bold text-slate-700">
+            Page {page} of {totalPages}
+          </span>
+          <button
+            className="rounded-lg border border-slate-200 px-3 py-1.5 font-bold text-slate-600 disabled:cursor-not-allowed disabled:opacity-40"
+            type="button"
+            disabled={page <= 1 || isLoading}
+            onClick={() => setPage((currentPage) => Math.max(currentPage - 1, 1))}
+          >
+            Previous
+          </button>
+          <button
+            className="rounded-lg border border-slate-200 px-3 py-1.5 font-bold text-slate-600 disabled:cursor-not-allowed disabled:opacity-40"
+            type="button"
+            disabled={page >= totalPages || isLoading}
+            onClick={() => setPage((currentPage) => Math.min(currentPage + 1, totalPages))}
+          >
+            Next
+          </button>
+        </div>
+      </div>
+    </section>
+  );
+}
+
+function FeedbackDetailPanel({ feedback, isLoading, totalCount }: { feedback: FeedbackDetail | null; isLoading: boolean; totalCount: number }) {
+  if (isLoading) {
+    return <aside className="rounded-xl border border-slate-100 bg-slate-50 p-5 text-sm font-semibold text-slate-500">Loading feedback detail...</aside>;
+  }
+
+  if (!feedback) {
+    return (
+      <aside className="rounded-xl border border-dashed border-slate-200 bg-slate-50 p-5 text-sm text-slate-500">
+        <p className="font-bold text-slate-700">Select a feedback row</p>
+        <p className="mt-2">Explorer has {totalCount} matching records. Open one to review text, translation, NLP output, classifications, and follow-up items.</p>
+      </aside>
+    );
+  }
+
+  const primaryIssue = feedback.issueClassifications.find((item) => item.isPrimary) ?? feedback.issueClassifications[0];
+
+  return (
+    <aside className="rounded-xl border border-slate-100 bg-slate-50 p-5">
+      <div className="mb-4 flex items-start justify-between gap-3">
+        <div>
+          <p className="text-xs font-black uppercase tracking-wide text-slate-400">{feedback.sourceType}</p>
+          <h3 className="text-lg font-black text-slate-950">{feedback.sourceReferenceId}</h3>
+          <p className="text-sm text-slate-500">{new Date(feedback.feedbackDate).toLocaleDateString()}</p>
+        </div>
+        <Badge tone={urgencyTone(primaryIssue?.urgencyLevel)}>{primaryIssue?.urgencyLevel ?? "Pending"}</Badge>
+      </div>
+
+      <DetailBlock title="Raw Text">{feedback.rawText}</DetailBlock>
+      <DetailBlock title="Masked Text">{feedback.maskedText ?? "Not available"}</DetailBlock>
+      <DetailBlock title="Translated Text">{feedback.nlpResult?.translatedText ?? "English or not processed yet"}</DetailBlock>
+
+      <div className="mt-4 grid gap-3 sm:grid-cols-2">
+        <DetailMetric label="Sentiment" value={feedback.nlpResult?.sentimentLabel ?? "Pending"} />
+        <DetailMetric label="Language" value={feedback.nlpResult?.detectedLanguage ?? "Pending"} />
+        <DetailMetric label="Issue" value={primaryIssue?.category ?? "Unclassified"} />
+        <DetailMetric label="Confidence" value={formatPercent(primaryIssue?.confidenceScore ?? feedback.nlpResult?.confidenceScore)} />
+      </div>
+
+      <div className="mt-4">
+        <p className="mb-2 text-xs font-black uppercase tracking-wide text-slate-400">Topics</p>
+        <div className="flex flex-wrap gap-2">
+          {(feedback.nlpResult?.topics?.length ? feedback.nlpResult.topics : ["Pending"]).map((topic) => (
+            <Badge key={topic} tone="blue">{topic}</Badge>
+          ))}
+        </div>
+      </div>
+
+      <DetailBlock title="Classification Explanation">{primaryIssue?.explanation ?? "Classification has not been generated yet."}</DetailBlock>
+      <DetailBlock title="Related Actions">
+        {feedback.reviewItems.length > 0
+          ? feedback.reviewItems.map((item) => `${item.status}: ${item.reason}`).join(" | ")
+          : "No review or recovery action has been created yet."}
+      </DetailBlock>
+    </aside>
+  );
+}
+
+function FilterSelect({ label, value, values, onChange }: { label: string; value: string; values: string[]; onChange: (value: string) => void }) {
+  return (
+    <label className="text-xs font-bold uppercase tracking-wide text-slate-400">
+      {label}
+      <select className="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-700" value={value} onChange={(event) => onChange(event.target.value)}>
+        <option value="">All</option>
+        {values.map((item) => (
+          <option key={item} value={item}>{item}</option>
+        ))}
+      </select>
+    </label>
+  );
+}
+
+function FilterInput({ label, value, placeholder, type = "text", onChange }: { label: string; value: string; placeholder?: string; type?: string; onChange: (value: string) => void }) {
+  return (
+    <label className="text-xs font-bold uppercase tracking-wide text-slate-400">
+      {label}
+      <input className="mt-1 w-full rounded-xl border border-slate-200 px-3 py-2 text-sm font-semibold text-slate-700" type={type} value={value} placeholder={placeholder} onChange={(event) => onChange(event.target.value)} />
+    </label>
+  );
+}
+
+function DetailBlock({ title, children }: { title: string; children: ReactNode }) {
+  return (
+    <div className="mt-4 rounded-xl bg-white p-4">
+      <p className="mb-2 text-xs font-black uppercase tracking-wide text-slate-400">{title}</p>
+      <p className="text-sm leading-6 text-slate-700">{children}</p>
+    </div>
+  );
+}
+
+function DetailMetric({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="rounded-xl bg-white p-3">
+      <p className="text-xs font-black uppercase tracking-wide text-slate-400">{label}</p>
+      <p className="mt-1 font-black text-slate-950">{value}</p>
+    </div>
+  );
+}
+
+function Badge({ tone, children }: { tone: "blue" | "green" | "amber" | "red" | "slate"; children: ReactNode }) {
+  const classes = {
+    blue: "bg-blue-50 text-blue-700",
+    green: "bg-emerald-50 text-emerald-700",
+    amber: "bg-amber-50 text-amber-700",
+    red: "bg-red-50 text-red-700",
+    slate: "bg-slate-100 text-slate-600"
+  };
+
+  return <span className={`inline-flex w-fit items-center rounded-lg px-2.5 py-1 text-xs font-black ${classes[tone]}`}>{children}</span>;
+}
+
+function sentimentTone(value: string | null): "green" | "amber" | "red" | "slate" {
+  if (value === "Positive") {
+    return "green";
+  }
+
+  if (value === "Negative") {
+    return "red";
+  }
+
+  if (value === "Mixed") {
+    return "amber";
+  }
+
+  return "slate";
+}
+
+function urgencyTone(value: string | null | undefined): "green" | "amber" | "red" | "slate" {
+  if (value === "Critical" || value === "High") {
+    return "red";
+  }
+
+  if (value === "Medium") {
+    return "amber";
+  }
+
+  if (value === "Low") {
+    return "green";
+  }
+
+  return "slate";
+}
+
+function formatPercent(value: number | null | undefined) {
+  return typeof value === "number" ? `${Math.round(value * 100)}%` : "Pending";
 }
 
 function FeedbackUploadCard() {

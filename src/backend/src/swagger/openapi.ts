@@ -129,6 +129,13 @@ export const openApiDocument = {
             }
           },
           {
+            name: "dealerName",
+            in: "query",
+            schema: {
+              type: "string"
+            }
+          },
+          {
             name: "customerId",
             in: "query",
             schema: {
@@ -150,6 +157,57 @@ export const openApiDocument = {
             schema: {
               type: "string",
               enum: ["Low", "Medium", "High", "Critical"]
+            }
+          },
+          {
+            name: "sentimentLabel",
+            in: "query",
+            schema: {
+              type: "string",
+              enum: ["Positive", "Neutral", "Negative", "Mixed", "Unknown"]
+            }
+          },
+          {
+            name: "issueCategory",
+            in: "query",
+            schema: {
+              type: "string",
+              enum: [
+                "ServiceQuality",
+                "RepairQuality",
+                "StaffBehavior",
+                "PriceTransparency",
+                "PartsAvailability",
+                "WarrantyConcern",
+                "VehicleQuality",
+                "DeliveryDelay",
+                "FacilityExperience",
+                "DigitalExperience",
+                "Other"
+              ]
+            }
+          },
+          {
+            name: "vehicleModel",
+            in: "query",
+            schema: {
+              type: "string"
+            }
+          },
+          {
+            name: "dateFrom",
+            in: "query",
+            schema: {
+              type: "string",
+              format: "date"
+            }
+          },
+          {
+            name: "dateTo",
+            in: "query",
+            schema: {
+              type: "string",
+              format: "date"
             }
           },
           {
@@ -719,6 +777,18 @@ export const openApiDocument = {
           vehicleModel: {
             type: "string",
             nullable: true
+          },
+          sentimentLabel: {
+            type: "string",
+            nullable: true,
+            enum: ["Positive", "Neutral", "Negative", "Mixed", "Unknown"]
+          },
+          topics: {
+            type: "array",
+            nullable: true,
+            items: {
+              type: "string"
+            }
           },
           issueCategory: {
             type: "string",
