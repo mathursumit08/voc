@@ -3,16 +3,15 @@ import { AlertTriangle, Bell, Car, Filter, LineChart, RefreshCw, Search, Sparkle
 import type { ReactNode } from "react";
 import { MetricCard } from "./components/MetricCard.js";
 
-const metrics = [
+const dealers = ["AutoTech Motors", "Prestige AutoHouse", "Capital Auto Hub", "Sunrise Motors", "Elite Autoworks"];
+const apiBaseUrl = import.meta.env.VITE_API_BASE_URL;
+const commandCenterMetrics = [
   { label: "CSI Score", value: "847", suffix: "/1000", accent: "blue", trend: "+2.4%" },
   { label: "Net Promoter Score", value: "+42", suffix: "NPS", accent: "teal", trend: "+3 pts" },
   { label: "Sentiment Score", value: "76.3%", suffix: "positive", accent: "green", trend: "+1.8%" },
   { label: "Customer Retention", value: "68.4%", suffix: "retained", accent: "amber", trend: "-1.2%" },
   { label: "Open Escalations", value: "247", suffix: "active", accent: "danger", trend: "+34" }
 ] as const;
-
-const dealers = ["AutoTech Motors", "Prestige AutoHouse", "Capital Auto Hub", "Sunrise Motors", "Elite Autoworks"];
-const apiBaseUrl = import.meta.env.VITE_API_BASE_URL;
 
 const sourceTypes = ["Survey", "JobCard", "WarrantyClaim", "GoogleReview", "SocialMedia", "CallCenter", "MobileApp", "ManualUpload"];
 const sentimentLabels = ["Positive", "Neutral", "Negative", "Mixed", "Unknown"];
@@ -97,7 +96,28 @@ interface ExplorerFilters {
   dateTo: string;
 }
 
-type AppPage = "dashboard" | "feedback";
+interface ExecutiveDashboardSummary {
+  totalFeedback: number;
+  positiveFeedback: number;
+  negativeFeedback: number;
+  criticalFeedback: number;
+  openWarrantySignals: number;
+  sentimentDistribution: Array<{ label: string; count: number }>;
+  topIssueCategories: Array<{ category: string; count: number }>;
+  dealerComparison: Array<{
+    dealerId: string;
+    dealerName: string;
+    dealerCode: string;
+    region: string;
+    csiScore: number | null;
+    npsScore: number | null;
+    sentimentScore: number | null;
+    openEscalations: number;
+    feedbackCount: number;
+  }>;
+}
+
+type AppPage = "dashboard" | "executive" | "feedback";
 
 export function App() {
   const [activePage, setActivePage] = useState<AppPage>("dashboard");
@@ -118,6 +138,9 @@ export function App() {
           <MenuButton active={activePage === "dashboard"} onClick={() => setActivePage("dashboard")}>
             Command Center
           </MenuButton>
+          <MenuButton active={activePage === "executive"} onClick={() => setActivePage("executive")}>
+            Executive Dashboard
+          </MenuButton>
           <MenuButton active={activePage === "feedback"} onClick={() => setActivePage("feedback")}>
             Feedback Workspace
           </MenuButton>
@@ -135,7 +158,7 @@ export function App() {
         </div>
       </header>
 
-      {activePage === "dashboard" ? <DashboardPage /> : <FeedbackWorkspacePage />}
+      {activePage === "dashboard" ? <DashboardPage /> : activePage === "executive" ? <ExecutiveDashboardPage /> : <FeedbackWorkspacePage />}
     </main>
   );
 }
@@ -157,19 +180,140 @@ function MenuButton({ active, children, onClick }: { active: boolean; children: 
 function DashboardPage() {
   return (
     <section className="grid gap-6 p-6 xl:grid-cols-[1fr_320px]">
+      <div className="space-y-6">
+        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-5">
+          {commandCenterMetrics.map((metric) => (
+            <MetricCard key={metric.label} {...metric} />
+          ))}
+        </div>
+
+        <div className="grid gap-6 xl:grid-cols-2">
+          <DashboardPanel title="CSI Score Trend" subtitle="Customer Satisfaction Index · Jan 2025 - Jun 2026">
+            <TrendPlaceholder icon={<LineChart />} color="blue" />
+          </DashboardPanel>
+          <DashboardPanel title="NPS Trend" subtitle="Net Promoter Score · Jan 2025 - Jun 2026">
+            <TrendPlaceholder icon={<TrendingUp />} color="teal" />
+          </DashboardPanel>
+        </div>
+
+        <div className="grid gap-6 xl:grid-cols-2">
+          <DashboardPanel title="Regional Sentiment Heatmap" subtitle="India · State-wise CX Sentiment">
+            <div className="flex h-64 items-center justify-center rounded-xl bg-gradient-to-br from-emerald-50 via-white to-amber-50 text-sm text-slate-500">
+              Regional sentiment visualization placeholder
+            </div>
+          </DashboardPanel>
+          <DashboardPanel title="Dealer Performance" subtitle="Top performers by CSI and NPS">
+            <div className="space-y-3">
+              {dealers.map((dealer, index) => (
+                <div key={dealer} className="grid grid-cols-[32px_1fr_72px_72px] items-center rounded-xl bg-slate-50 px-3 py-3 text-sm">
+                  <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-blue-100 font-bold text-blue-700">{index + 1}</span>
+                  <span className="font-semibold">{dealer}</span>
+                  <span className="font-bold text-slate-900">{923 - index * 6}</span>
+                  <span className="font-bold text-emerald-600">+{68 - index * 3}</span>
+                </div>
+              ))}
+            </div>
+          </DashboardPanel>
+        </div>
+      </div>
+
+      <DashboardInsightsSidebar criticalText="4 active · 2 require immediate action" />
+    </section>
+  );
+}
+
+function ExecutiveDashboardPage() {
+  const [dashboard, setDashboard] = useState<ExecutiveDashboardSummary | null>(null);
+  const [isLoadingDashboard, setIsLoadingDashboard] = useState(false);
+  const [dashboardMessage, setDashboardMessage] = useState("Loading executive dashboard...");
+
+  async function loadDashboard() {
+    setIsLoadingDashboard(true);
+
+    try {
+      const response = await fetch(`${apiBaseUrl}/dashboard/executive`);
+      const payload = (await response.json()) as ExecutiveDashboardSummary;
+
+      if (!response.ok) {
+        throw new Error("Could not load executive dashboard.");
+      }
+
+      setDashboard(payload);
+      setDashboardMessage("Live prototype dashboard data loaded.");
+    } catch (error) {
+      setDashboard(null);
+      setDashboardMessage(error instanceof Error ? error.message : "Could not load executive dashboard.");
+    } finally {
+      setIsLoadingDashboard(false);
+    }
+  }
+
+  useEffect(() => {
+    void loadDashboard();
+  }, []);
+
+  const positiveRate = dashboard?.totalFeedback ? Math.round((dashboard.positiveFeedback / dashboard.totalFeedback) * 100) : 76;
+  const negativeRate = dashboard?.totalFeedback ? Math.round((dashboard.negativeFeedback / dashboard.totalFeedback) * 100) : 18;
+  const dashboardMetrics = [
+    { label: "Total Feedback", value: String(dashboard?.totalFeedback ?? 847), suffix: "records", accent: "blue", trend: "Live" },
+    { label: "Positive Sentiment", value: `${positiveRate}%`, suffix: "positive", accent: "green", trend: "+1.8%" },
+    { label: "Negative Sentiment", value: `${negativeRate}%`, suffix: "negative", accent: "amber", trend: "watch" },
+    { label: "Critical Feedback", value: String(dashboard?.criticalFeedback ?? 4), suffix: "critical", accent: "danger", trend: "action" },
+    { label: "Warranty Signals", value: String(dashboard?.openWarrantySignals ?? 0), suffix: "open", accent: "teal", trend: "quality" }
+  ] as const;
+  const sentimentRows = dashboard?.sentimentDistribution.length ? dashboard.sentimentDistribution : [
+    { label: "Positive", count: 12 },
+    { label: "Neutral", count: 4 },
+    { label: "Negative", count: 3 }
+  ];
+  const topIssues = dashboard?.topIssueCategories.length ? dashboard.topIssueCategories : [
+    { category: "RepairQuality", count: 8 },
+    { category: "PriceTransparency", count: 5 },
+    { category: "WarrantyConcern", count: 3 }
+  ];
+  const dealerRows = dashboard?.dealerComparison.length ? dashboard.dealerComparison : dealers.map((dealer, index) => ({
+    dealerId: dealer,
+    dealerName: dealer,
+    dealerCode: `DEMO-${index + 1}`,
+    region: "Demo",
+    csiScore: 923 - index * 6,
+    npsScore: 68 - index * 3,
+    sentimentScore: null,
+    openEscalations: index,
+    feedbackCount: 20 - index
+  }));
+
+  return (
+    <section className="grid gap-6 p-6 xl:grid-cols-[1fr_320px]">
         <div className="space-y-6">
+          <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl bg-white p-5 shadow-card">
+            <div>
+              <p className="text-xs font-black uppercase tracking-[0.18em] text-blue-600">Executive Dashboard</p>
+              <h2 className="text-2xl font-black text-slate-950">OEM VoC Command Center</h2>
+              <p className="mt-1 text-sm text-slate-500">{dashboardMessage}</p>
+            </div>
+            <button
+              className="inline-flex items-center gap-2 rounded-xl border border-slate-200 px-3 py-2 text-sm font-bold text-slate-600 hover:bg-slate-50"
+              type="button"
+              onClick={() => void loadDashboard()}
+            >
+              <RefreshCw size={16} className={isLoadingDashboard ? "animate-spin" : ""} />
+              Refresh
+            </button>
+          </div>
+
           <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-5">
-            {metrics.map((metric) => (
+            {dashboardMetrics.map((metric) => (
               <MetricCard key={metric.label} {...metric} />
             ))}
           </div>
 
           <div className="grid gap-6 xl:grid-cols-2">
-            <DashboardPanel title="CSI Score Trend" subtitle="Customer Satisfaction Index · Jan 2025 - Jun 2026">
-              <TrendPlaceholder icon={<LineChart />} color="blue" />
+            <DashboardPanel title="Overall Sentiment Distribution" subtitle="Current NLP sentiment labels">
+              <DistributionList rows={sentimentRows.map((row) => ({ label: row.label, value: row.count }))} tone="sentiment" />
             </DashboardPanel>
-            <DashboardPanel title="NPS Trend" subtitle="Net Promoter Score · Jan 2025 - Jun 2026">
-              <TrendPlaceholder icon={<TrendingUp />} color="teal" />
+            <DashboardPanel title="Top Issue Categories" subtitle="Primary classified issue categories">
+              <DistributionList rows={topIssues.map((row) => ({ label: row.category, value: row.count }))} tone="issue" />
             </DashboardPanel>
           </div>
 
@@ -181,12 +325,15 @@ function DashboardPage() {
             </DashboardPanel>
             <DashboardPanel title="Dealer Performance" subtitle="Top performers by CSI and NPS">
               <div className="space-y-3">
-                {dealers.map((dealer, index) => (
-                  <div key={dealer} className="grid grid-cols-[32px_1fr_72px_72px] items-center rounded-xl bg-slate-50 px-3 py-3 text-sm">
+                {dealerRows.map((dealer, index) => (
+                  <div key={dealer.dealerId} className="grid grid-cols-[32px_1fr_72px_72px] items-center rounded-xl bg-slate-50 px-3 py-3 text-sm">
                     <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-blue-100 font-bold text-blue-700">{index + 1}</span>
-                    <span className="font-semibold">{dealer}</span>
-                    <span className="font-bold text-slate-900">{923 - index * 6}</span>
-                    <span className="font-bold text-emerald-600">+{68 - index * 3}</span>
+                    <span>
+                      <span className="block font-semibold">{dealer.dealerName}</span>
+                      <span className="text-xs text-slate-400">{dealer.region} · {dealer.feedbackCount} feedback</span>
+                    </span>
+                    <span className="font-bold text-slate-900">{Math.round(dealer.csiScore ?? 0)}</span>
+                    <span className="font-bold text-emerald-600">+{Math.round(dealer.npsScore ?? 0)}</span>
                   </div>
                 ))}
               </div>
@@ -195,34 +342,65 @@ function DashboardPage() {
 
         </div>
 
-        <aside className="space-y-4">
-          <div className="rounded-2xl bg-white p-5 shadow-card">
-            <div className="mb-4 flex items-center gap-3">
-              <span className="rounded-xl bg-indigo-100 p-2 text-indigo-600"><Sparkles size={20} /></span>
-              <div>
-                <h2 className="font-bold">AI Generated Insights</h2>
-                <p className="text-xs text-slate-500">Powered by AutoIndia CX Intelligence</p>
-              </div>
-            </div>
-            {["South India Surge", "Price Transparency Alert", "NCR Retention Drop"].map((item, index) => (
-              <article key={item} className="mb-3 rounded-xl border border-slate-100 p-4">
-                <p className={`mb-2 text-xs font-bold uppercase ${index === 2 ? "text-red-600" : index === 1 ? "text-amber-600" : "text-emerald-600"}`}>
-                  {index === 2 ? "Risk Detected" : index === 1 ? "Action Required" : "Positive Trend"}
-                </p>
-                <h3 className="font-bold">{item}</h3>
-                <p className="mt-2 text-sm leading-6 text-slate-600">Prototype insight summary for stakeholder validation and demo flow.</p>
-              </article>
-            ))}
-          </div>
-          <div className="rounded-2xl border border-red-200 bg-white p-5 shadow-card">
-            <div className="flex items-center gap-3 text-red-600">
-              <AlertTriangle size={22} />
-              <h2 className="font-bold text-slate-950">Critical Alerts</h2>
-            </div>
-            <p className="mt-3 text-sm text-slate-600">4 active · 2 require immediate action</p>
-          </div>
-        </aside>
+        <DashboardInsightsSidebar
+          criticalText={`${dashboard?.criticalFeedback ?? 4} critical feedback · ${dashboard?.openWarrantySignals ?? 0} open warranty signals`}
+        />
       </section>
+  );
+}
+
+function DashboardInsightsSidebar({ criticalText }: { criticalText: string }) {
+  return (
+    <aside className="space-y-4">
+      <div className="rounded-2xl bg-white p-5 shadow-card">
+        <div className="mb-4 flex items-center gap-3">
+          <span className="rounded-xl bg-indigo-100 p-2 text-indigo-600"><Sparkles size={20} /></span>
+          <div>
+            <h2 className="font-bold">AI Generated Insights</h2>
+            <p className="text-xs text-slate-500">Powered by AutoIndia CX Intelligence</p>
+          </div>
+        </div>
+        {["South India Surge", "Price Transparency Alert", "NCR Retention Drop"].map((item, index) => (
+          <article key={item} className="mb-3 rounded-xl border border-slate-100 p-4">
+            <p className={`mb-2 text-xs font-bold uppercase ${index === 2 ? "text-red-600" : index === 1 ? "text-amber-600" : "text-emerald-600"}`}>
+              {index === 2 ? "Risk Detected" : index === 1 ? "Action Required" : "Positive Trend"}
+            </p>
+            <h3 className="font-bold">{item}</h3>
+            <p className="mt-2 text-sm leading-6 text-slate-600">Prototype insight summary for stakeholder validation and demo flow.</p>
+          </article>
+        ))}
+      </div>
+      <div className="rounded-2xl border border-red-200 bg-white p-5 shadow-card">
+        <div className="flex items-center gap-3 text-red-600">
+          <AlertTriangle size={22} />
+          <h2 className="font-bold text-slate-950">Critical Alerts</h2>
+        </div>
+        <p className="mt-3 text-sm text-slate-600">{criticalText}</p>
+      </div>
+    </aside>
+  );
+}
+
+function DistributionList({ rows, tone }: { rows: Array<{ label: string; value: number }>; tone: "sentiment" | "issue" }) {
+  const maxValue = Math.max(...rows.map((row) => row.value), 1);
+
+  return (
+    <div className="space-y-3">
+      {rows.map((row) => (
+        <div key={row.label} className="rounded-xl bg-slate-50 p-3">
+          <div className="mb-2 flex items-center justify-between gap-3 text-sm">
+            <span className="font-bold text-slate-800">{row.label}</span>
+            <span className="font-black text-slate-950">{row.value}</span>
+          </div>
+          <div className="h-2 rounded-full bg-white">
+            <div
+              className={`h-2 rounded-full ${tone === "sentiment" ? "bg-emerald-500" : "bg-blue-600"}`}
+              style={{ width: `${Math.max((row.value / maxValue) * 100, 8)}%` }}
+            />
+          </div>
+        </div>
+      ))}
+    </div>
   );
 }
 
