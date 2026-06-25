@@ -1,5 +1,6 @@
 import { Router } from "express";
 import { getFeedbackRecordById, listFeedbackRecords } from "../../feedback/feedbackRepository.js";
+import { processFeedbackIssueClassification, processPendingFeedbackIssueClassifications } from "../../nlp/issueClassificationService.js";
 import { processFeedbackLanguage, processPendingFeedbackLanguages } from "../../nlp/languageService.js";
 import { processFeedbackSentimentTopics, processPendingFeedbackSentimentTopics } from "../../nlp/sentimentTopicService.js";
 
@@ -66,6 +67,32 @@ feedbackRouter.post("/feedback/sentiment-topics/run", async (req, res, next) => 
 feedbackRouter.post("/feedback/:id/sentiment-topics", async (req, res, next) => {
   try {
     const result = await processFeedbackSentimentTopics(req.params.id);
+
+    if (!result) {
+      res.status(404).json({ message: "Feedback record not found." });
+      return;
+    }
+
+    res.json(result);
+  } catch (error) {
+    next(error);
+  }
+});
+
+feedbackRouter.post("/feedback/issue-classification/run", async (req, res, next) => {
+  try {
+    const limit = Number(req.body?.limit ?? req.query.limit ?? 25);
+    const result = await processPendingFeedbackIssueClassifications(Number.isFinite(limit) ? limit : 25);
+
+    res.json(result);
+  } catch (error) {
+    next(error);
+  }
+});
+
+feedbackRouter.post("/feedback/:id/issue-classification", async (req, res, next) => {
+  try {
+    const result = await processFeedbackIssueClassification(req.params.id);
 
     if (!result) {
       res.status(404).json({ message: "Feedback record not found." });
