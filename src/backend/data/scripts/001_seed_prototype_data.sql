@@ -5,6 +5,7 @@
 BEGIN;
 
 TRUNCATE TABLE
+  app_users,
   human_review_queue,
   crm_tasks,
   warranty_signals,
@@ -72,6 +73,56 @@ VALUES
   ('DLR-048', 'TechPark Cars', 'TPC-BLR-048', 'South', 'Bengaluru', 'Karnataka', true),
   ('DLR-049', 'Marine Drive Auto', 'MDA-MUM-049', 'West', 'Mumbai', 'Maharashtra', true),
   ('DLR-050', 'Capital Express Motors', 'CEM-DEL-050', 'North', 'New Delhi', 'Delhi', true);
+
+WITH seeded_users AS (
+  SELECT
+    'admin'::text AS username,
+    'Admin User'::text AS display_name,
+    'Admin'::"UserRole" AS role,
+    NULL::uuid AS dealer_id,
+    'Feqma$ecure'::text AS plain_password
+  UNION ALL
+  SELECT
+    'oem',
+    'OEM User',
+    'OemUser'::"UserRole",
+    NULL::uuid,
+    'Password123'
+  UNION ALL
+  SELECT
+    'reviewer',
+    'Review Specialist',
+    'Reviewer'::"UserRole",
+    NULL::uuid,
+    'Password123'
+  UNION ALL
+  SELECT
+    'dealer_' || lower(replace(code, '-', '_')),
+    name || ' Dealer User',
+    'DealerUser'::"UserRole",
+    id,
+    'Password123'
+  FROM dealers
+),
+salted_users AS (
+  SELECT
+    username,
+    display_name,
+    role,
+    dealer_id,
+    'voc:user:' || username AS salt,
+    plain_password
+  FROM seeded_users
+)
+INSERT INTO app_users (username, display_name, role, dealer_id, password_hash, is_active)
+SELECT
+  username,
+  display_name,
+  role,
+  dealer_id,
+  'sha256:' || salt || ':' || encode(digest(salt || ':' || plain_password, 'sha256'), 'hex'),
+  true
+FROM salted_users;
 
 INSERT INTO customers (external_id, masked_name, masked_phone, masked_email, city, state)
 VALUES

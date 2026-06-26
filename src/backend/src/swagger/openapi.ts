@@ -13,7 +13,12 @@ export const openApiDocument = {
       description: "Versioned API base path"
     }
   ],
+  security: [{ bearerAuth: [] }],
   tags: [
+    {
+      name: "Auth",
+      description: "Prototype login, refresh token, and RBAC endpoints"
+    },
     {
       name: "Health",
       description: "Application health and readiness endpoints"
@@ -32,6 +37,89 @@ export const openApiDocument = {
     }
   ],
   paths: {
+    "/auth/login": {
+      post: {
+        tags: ["Auth"],
+        summary: "Login and receive JWT tokens",
+        description: "Public endpoint. Users are validated from the app_users table. Seeded users include admin, oem, reviewer, and one dealer user per dealer.",
+        operationId: "login",
+        security: [],
+        requestBody: {
+          required: true,
+          content: {
+            "application/json": {
+              schema: {
+                type: "object",
+                required: ["username", "password"],
+                properties: {
+                  username: { type: "string", example: "admin" },
+                  password: { type: "string", example: "Feqma$ecure" }
+                }
+              }
+            }
+          }
+        },
+        responses: {
+          "200": {
+            description: "Authenticated",
+            content: {
+              "application/json": {
+                schema: { $ref: "#/components/schemas/AuthResponse" }
+              }
+            }
+          },
+          "401": {
+            description: "Invalid credentials",
+            content: {
+              "application/json": {
+                schema: { $ref: "#/components/schemas/ErrorResponse" }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/auth/refresh": {
+      post: {
+        tags: ["Auth"],
+        summary: "Refresh JWT tokens",
+        description: "Public endpoint. Exchanges a valid refresh token for a new access token and refresh token.",
+        operationId: "refreshToken",
+        security: [],
+        requestBody: {
+          required: true,
+          content: {
+            "application/json": {
+              schema: {
+                type: "object",
+                required: ["refreshToken"],
+                properties: {
+                  refreshToken: { type: "string" }
+                }
+              }
+            }
+          }
+        },
+        responses: {
+          "200": {
+            description: "Tokens refreshed",
+            content: {
+              "application/json": {
+                schema: { $ref: "#/components/schemas/AuthResponse" }
+              }
+            }
+          },
+          "401": {
+            description: "Invalid refresh token",
+            content: {
+              "application/json": {
+                schema: { $ref: "#/components/schemas/ErrorResponse" }
+              }
+            }
+          }
+        }
+      }
+    },
     "/health": {
       get: {
         tags: ["Health"],
@@ -65,6 +153,93 @@ export const openApiDocument = {
               "application/json": {
                 schema: {
                   $ref: "#/components/schemas/ExecutiveDashboardSummary"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/dashboard/dealer": {
+      get: {
+        tags: ["Dashboard"],
+        summary: "Get assigned dealer dashboard summary",
+        description:
+          "Returns dealer-scoped sentiment trend, top issues, complaint volume, open CRM tasks, and scorecard benchmark comparison. Use dealerCode or dealerId to model the assigned dealer for the prototype.",
+        operationId: "getDealerDashboard",
+        parameters: [
+          {
+            name: "dealerCode",
+            in: "query",
+            schema: {
+              type: "string",
+              example: "AT-BLR-001"
+            }
+          },
+          {
+            name: "dealerId",
+            in: "query",
+            schema: {
+              type: "string",
+              format: "uuid"
+            }
+          }
+        ],
+        responses: {
+          "200": {
+            description: "Dealer dashboard summary returned",
+            content: {
+              "application/json": {
+                schema: {
+                  $ref: "#/components/schemas/DealerDashboardDetail"
+                }
+              }
+            }
+          },
+          "404": {
+            description: "Dealer not found",
+            content: {
+              "application/json": {
+                schema: {
+                  $ref: "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/dashboard/dealers": {
+      get: {
+        tags: ["Dashboard"],
+        summary: "Search dealers for dashboard selection",
+        description: "Returns active dealers for the searchable dealer dashboard dropdown. Restricted to Admin and OEM users.",
+        operationId: "searchDashboardDealers",
+        parameters: [
+          {
+            name: "search",
+            in: "query",
+            schema: {
+              type: "string"
+            }
+          }
+        ],
+        responses: {
+          "200": {
+            description: "Dealer options returned",
+            content: {
+              "application/json": {
+                schema: {
+                  type: "object",
+                  required: ["dealers"],
+                  properties: {
+                    dealers: {
+                      type: "array",
+                      items: {
+                        $ref: "#/components/schemas/DealerLookupOption"
+                      }
+                    }
+                  }
                 }
               }
             }
@@ -646,6 +821,13 @@ export const openApiDocument = {
     }
   },
   components: {
+    securitySchemes: {
+      bearerAuth: {
+        type: "http",
+        scheme: "bearer",
+        bearerFormat: "JWT"
+      }
+    },
     schemas: {
       ErrorResponse: {
         type: "object",
@@ -662,6 +844,27 @@ export const openApiDocument = {
             },
             example: [".csv", ".xlsx"]
           }
+        }
+      },
+      AuthUser: {
+        type: "object",
+        required: ["id", "username", "displayName", "role"],
+        properties: {
+          id: { type: "string", example: "usr-admin" },
+          username: { type: "string", example: "admin" },
+          displayName: { type: "string", example: "Admin User" },
+          role: { type: "string", enum: ["Admin", "OemUser", "DealerUser", "Reviewer"] },
+          dealerCode: { type: "string", nullable: true, example: "AT-BLR-001" }
+        }
+      },
+      AuthResponse: {
+        type: "object",
+        required: ["accessToken", "refreshToken", "expiresIn", "user"],
+        properties: {
+          accessToken: { type: "string" },
+          refreshToken: { type: "string" },
+          expiresIn: { type: "integer", example: 900 },
+          user: { $ref: "#/components/schemas/AuthUser" }
         }
       },
       HealthResponse: {
@@ -789,6 +992,113 @@ export const openApiDocument = {
             type: "array",
             items: {
               $ref: "#/components/schemas/DealerDashboardSummary"
+            }
+          }
+        }
+      },
+      DealerLookupOption: {
+        type: "object",
+        required: ["id", "name", "code", "region", "city", "state"],
+        properties: {
+          id: { type: "string", format: "uuid" },
+          name: { type: "string" },
+          code: { type: "string" },
+          region: { type: "string" },
+          city: { type: "string" },
+          state: { type: "string" }
+        }
+      },
+      DealerDashboardDetail: {
+        type: "object",
+        required: ["dealer", "scorecard", "complaintVolume", "sentimentTrend", "topIssues", "openCrmTasks"],
+        properties: {
+          dealer: {
+            type: "object",
+            required: ["id", "name", "code", "region", "city", "state"],
+            properties: {
+              id: {
+                type: "string",
+                format: "uuid"
+              },
+              name: {
+                type: "string"
+              },
+              code: {
+                type: "string"
+              },
+              region: {
+                type: "string"
+              },
+              city: {
+                type: "string"
+              },
+              state: {
+                type: "string"
+              }
+            }
+          },
+          scorecard: {
+            type: "object",
+            properties: {
+              csiScore: { type: "number", nullable: true },
+              csiBenchmark: { type: "number", nullable: true },
+              npsScore: { type: "number", nullable: true },
+              npsBenchmark: { type: "number", nullable: true },
+              sentimentScore: { type: "number", nullable: true },
+              sentimentBenchmark: { type: "number", nullable: true },
+              feedbackCount: { type: "integer" },
+              openEscalations: { type: "integer" }
+            }
+          },
+          complaintVolume: {
+            type: "array",
+            items: {
+              type: "object",
+              required: ["period", "count"],
+              properties: {
+                period: { type: "string", example: "2026-06" },
+                count: { type: "integer" }
+              }
+            }
+          },
+          sentimentTrend: {
+            type: "array",
+            items: {
+              type: "object",
+              required: ["period", "positive", "neutral", "negative", "mixed"],
+              properties: {
+                period: { type: "string", example: "2026-06" },
+                positive: { type: "integer" },
+                neutral: { type: "integer" },
+                negative: { type: "integer" },
+                mixed: { type: "integer" }
+              }
+            }
+          },
+          topIssues: {
+            type: "array",
+            items: {
+              type: "object",
+              required: ["category", "count"],
+              properties: {
+                category: { type: "string" },
+                count: { type: "integer" }
+              }
+            }
+          },
+          openCrmTasks: {
+            type: "array",
+            items: {
+              type: "object",
+              required: ["id", "title", "priority", "status", "feedbackRecordId"],
+              properties: {
+                id: { type: "string", format: "uuid" },
+                title: { type: "string" },
+                priority: { type: "string", enum: ["Low", "Medium", "High", "Critical"] },
+                status: { type: "string", enum: ["Open", "InProgress"] },
+                dueAt: { type: "string", format: "date-time", nullable: true },
+                feedbackRecordId: { type: "string", format: "uuid" }
+              }
             }
           }
         }

@@ -83,6 +83,13 @@ enum ReviewQueueStatus {
   Dismissed
 }
 
+enum UserRole {
+  Admin
+  OemUser
+  DealerUser
+  Reviewer
+}
+
 model Customer {
   id               String           @id @default(uuid()) @db.Uuid
   externalId       String?          @unique @map("external_id")
@@ -144,11 +151,30 @@ model Dealer {
   dealerScores    DealerScore[]
   warrantySignals WarrantySignal[]
   crmTasks        CrmTask[]
+  users           AppUser[]
 
   @@index([region])
   @@index([state, city])
   @@index([isActive])
   @@map("dealers")
+}
+
+model AppUser {
+  id           String    @id @default(uuid()) @db.Uuid
+  username     String    @unique
+  displayName  String    @map("display_name")
+  role         UserRole
+  dealerId     String?   @map("dealer_id") @db.Uuid
+  passwordHash String    @map("password_hash")
+  isActive     Boolean   @default(true) @map("is_active")
+  lastLoginAt  DateTime? @map("last_login_at")
+  createdAt    DateTime  @default(now()) @map("created_at")
+  updatedAt    DateTime  @updatedAt @map("updated_at")
+  dealer       Dealer?   @relation(fields: [dealerId], references: [id])
+
+  @@index([role, isActive])
+  @@index([dealerId])
+  @@map("app_users")
 }
 
 model JobCard {

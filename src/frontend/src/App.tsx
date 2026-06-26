@@ -117,10 +117,145 @@ interface ExecutiveDashboardSummary {
   }>;
 }
 
-type AppPage = "dashboard" | "executive" | "feedback";
+interface DealerDashboardSummary {
+  dealer: {
+    id: string;
+    name: string;
+    code: string;
+    region: string;
+    city: string;
+    state: string;
+  };
+  scorecard: {
+    csiScore: number | null;
+    csiBenchmark: number | null;
+    npsScore: number | null;
+    npsBenchmark: number | null;
+    sentimentScore: number | null;
+    sentimentBenchmark: number | null;
+    feedbackCount: number;
+    openEscalations: number;
+  };
+  complaintVolume: Array<{ period: string; count: number }>;
+  sentimentTrend: Array<{ period: string; positive: number; neutral: number; negative: number; mixed: number }>;
+  topIssues: Array<{ category: string; count: number }>;
+  openCrmTasks: Array<{ id: string; title: string; priority: string; status: string; dueAt: string | null; feedbackRecordId: string }>;
+}
+
+interface DealerLookupOption {
+  id: string;
+  name: string;
+  code: string;
+  region: string;
+  city: string;
+  state: string;
+}
+
+type UserRole = "Admin" | "OemUser" | "DealerUser" | "Reviewer";
+interface AuthUser {
+  id: string;
+  username: string;
+  displayName: string;
+  role: UserRole;
+  dealerCode?: string;
+}
+interface AuthSession {
+  accessToken: string;
+  refreshToken: string;
+  expiresIn: number;
+  user: AuthUser;
+}
+
+type AppPage = "dashboard" | "executive" | "dealer" | "feedback";
+type AuthFetch = (input: string, init?: RequestInit) => Promise<Response>;
+const authStorageKey = "voc.auth";
+
+function readStoredAuthSession() {
+  const storedValue = window.localStorage.getItem(authStorageKey);
+  return storedValue ? (JSON.parse(storedValue) as AuthSession) : null;
+}
+
+function storeAuthSession(session: AuthSession | null) {
+  if (session) {
+    window.localStorage.setItem(authStorageKey, JSON.stringify(session));
+    return;
+  }
+
+  window.localStorage.removeItem(authStorageKey);
+}
+
+function defaultPageForRole(role: UserRole): AppPage {
+  if (role === "DealerUser") {
+    return "dealer";
+  }
+
+  if (role === "Reviewer") {
+    return "feedback";
+  }
+
+  return "dashboard";
+}
+
+function canAccessPage(role: UserRole, page: AppPage) {
+  const permissions: Record<UserRole, AppPage[]> = {
+    Admin: ["dashboard", "executive", "dealer", "feedback"],
+    OemUser: ["dashboard", "executive", "dealer", "feedback"],
+    DealerUser: ["dealer", "feedback"],
+    Reviewer: ["feedback"]
+  };
+
+  return permissions[role].includes(page);
+}
 
 export function App() {
-  const [activePage, setActivePage] = useState<AppPage>("dashboard");
+  const [session, setSession] = useState<AuthSession | null>(() => readStoredAuthSession());
+  const [activePage, setActivePage] = useState<AppPage>(() => (session ? defaultPageForRole(session.user.role) : "dashboard"));
+
+  function saveSession(nextSession: AuthSession | null) {
+    storeAuthSession(nextSession);
+    setSession(nextSession);
+
+    if (nextSession) {
+      setActivePage(defaultPageForRole(nextSession.user.role));
+    }
+  }
+
+  async function authFetch(input: string, init: RequestInit = {}) {
+    if (!session) {
+      throw new Error("Authentication required.");
+    }
+
+    async function sendRequest(accessToken: string) {
+      const headers = new Headers(init.headers);
+      headers.set("Authorization", `Bearer ${accessToken}`);
+      return fetch(input, { ...init, headers });
+    }
+
+    const response = await sendRequest(session.accessToken);
+
+    if (response.status !== 401) {
+      return response;
+    }
+
+    const refreshResponse = await fetch(`${apiBaseUrl}/auth/refresh`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ refreshToken: session.refreshToken })
+    });
+
+    if (!refreshResponse.ok) {
+      saveSession(null);
+      return response;
+    }
+
+    const refreshedSession = (await refreshResponse.json()) as AuthSession;
+    saveSession(refreshedSession);
+    return sendRequest(refreshedSession.accessToken);
+  }
+
+  if (!session) {
+    return <LoginPage onAuthenticated={saveSession} />;
+  }
 
   return (
     <main className="min-h-screen bg-slate-100 text-slate-950">
@@ -130,20 +265,31 @@ export function App() {
             <Car size={24} />
           </div>
           <div>
-            <p className="text-xs font-semibold uppercase tracking-[0.22em] text-blue-200">AutoIndia Motors · Voice of Customer</p>
+            <p className="text-xs font-semibold uppercase tracking-[0.22em] text-blue-200">Voice of Customer</p>
             <h1 className="text-lg font-bold">Customer Experience Command Center</h1>
           </div>
         </div>
         <nav className="order-3 flex w-full items-center gap-3 lg:order-none lg:w-auto">
-          <MenuButton active={activePage === "dashboard"} onClick={() => setActivePage("dashboard")}>
-            Command Center
-          </MenuButton>
-          <MenuButton active={activePage === "executive"} onClick={() => setActivePage("executive")}>
-            Executive Dashboard
-          </MenuButton>
-          <MenuButton active={activePage === "feedback"} onClick={() => setActivePage("feedback")}>
-            Feedback Workspace
-          </MenuButton>
+          {canAccessPage(session.user.role, "dashboard") ? (
+            <MenuButton active={activePage === "dashboard"} onClick={() => setActivePage("dashboard")}>
+              Command Center
+            </MenuButton>
+          ) : null}
+          {canAccessPage(session.user.role, "executive") ? (
+            <MenuButton active={activePage === "executive"} onClick={() => setActivePage("executive")}>
+              Executive Dashboard
+            </MenuButton>
+          ) : null}
+          {canAccessPage(session.user.role, "dealer") ? (
+            <MenuButton active={activePage === "dealer"} onClick={() => setActivePage("dealer")}>
+              Dealer Dashboard
+            </MenuButton>
+          ) : null}
+          {canAccessPage(session.user.role, "feedback") ? (
+            <MenuButton active={activePage === "feedback"} onClick={() => setActivePage("feedback")}>
+              Feedback Workspace
+            </MenuButton>
+          ) : null}
         </nav>
         <div className="flex items-center gap-3">
           <div className="hidden items-center gap-2 rounded-xl border border-white/10 bg-white/10 px-4 py-2 text-sm text-slate-300 md:flex">
@@ -153,12 +299,23 @@ export function App() {
           <Bell size={20} />
           <div className="flex items-center gap-3 rounded-xl border border-white/10 bg-white/10 px-3 py-2">
             <span className="flex h-8 w-8 items-center justify-center rounded-full bg-blue-600 text-sm font-bold">RK</span>
-            <span className="hidden text-sm md:block">Rahul Kumar</span>
+            <span className="hidden text-sm md:block">{session.user.displayName}</span>
           </div>
+          <button className="rounded-xl border border-white/10 px-3 py-2 text-sm font-bold text-slate-200" type="button" onClick={() => saveSession(null)}>
+            Logout
+          </button>
         </div>
       </header>
 
-      {activePage === "dashboard" ? <DashboardPage /> : activePage === "executive" ? <ExecutiveDashboardPage /> : <FeedbackWorkspacePage />}
+      {activePage === "dashboard" ? (
+        <DashboardPage />
+      ) : activePage === "executive" ? (
+        <ExecutiveDashboardPage authFetch={authFetch} />
+      ) : activePage === "dealer" ? (
+        <DealerDashboardPage authFetch={authFetch} user={session.user} />
+      ) : (
+        <FeedbackWorkspacePage authFetch={authFetch} user={session.user} />
+      )}
     </main>
   );
 }
@@ -174,6 +331,76 @@ function MenuButton({ active, children, onClick }: { active: boolean; children: 
     >
       {children}
     </button>
+  );
+}
+
+function LoginPage({ onAuthenticated }: { onAuthenticated: (session: AuthSession) => void }) {
+  const [username, setUsername] = useState("");
+  const [password, setPassword] = useState("");
+  const [message, setMessage] = useState("Sign in with your assigned VoC account.");
+  const [isLoggingIn, setIsLoggingIn] = useState(false);
+
+  async function login() {
+    setIsLoggingIn(true);
+    setMessage("Signing in...");
+
+    try {
+      const response = await fetch(`${apiBaseUrl}/auth/login`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ username, password })
+      });
+      const payload = await response.json();
+
+      if (!response.ok) {
+        throw new Error(payload.message ?? "Login failed.");
+      }
+
+      onAuthenticated(payload as AuthSession);
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "Login failed.");
+    } finally {
+      setIsLoggingIn(false);
+    }
+  }
+
+  return (
+    <main className="flex min-h-screen items-center justify-center bg-slate-100 p-6 text-slate-950">
+      <section className="w-full max-w-md rounded-2xl bg-white p-6 shadow-card">
+        <div className="mb-6 flex items-center gap-3">
+          <span className="flex h-11 w-11 items-center justify-center rounded-xl bg-blue-600 text-white">
+            <Car size={24} />
+          </span>
+          <div>
+            <p className="text-xs font-black uppercase tracking-[0.18em] text-blue-600">VoC Prototype</p>
+            <h1 className="text-xl font-black">Sign In</h1>
+          </div>
+        </div>
+        <form
+          onSubmit={(event) => {
+            event.preventDefault();
+            void login();
+          }}
+        >
+          <label className="mb-3 block text-xs font-bold uppercase tracking-wide text-slate-400">
+            Username
+            <input className="mt-1 w-full rounded-xl border border-slate-200 px-3 py-2 text-sm font-semibold text-slate-700" value={username} onChange={(event) => setUsername(event.target.value)} />
+          </label>
+          <label className="mb-4 block text-xs font-bold uppercase tracking-wide text-slate-400">
+            Password
+            <input className="mt-1 w-full rounded-xl border border-slate-200 px-3 py-2 text-sm font-semibold text-slate-700" type="password" value={password} onChange={(event) => setPassword(event.target.value)} />
+          </label>
+          <button
+            className="w-full rounded-xl bg-blue-600 px-4 py-2 text-sm font-bold text-white disabled:cursor-not-allowed disabled:bg-slate-300"
+            type="submit"
+            disabled={isLoggingIn}
+          >
+            {isLoggingIn ? "Signing in..." : "Login"}
+          </button>
+        </form>
+        <p className="mt-4 rounded-xl bg-slate-50 px-3 py-2 text-sm font-semibold text-slate-600">{message}</p>
+      </section>
+    </main>
   );
 }
 
@@ -222,7 +449,7 @@ function DashboardPage() {
   );
 }
 
-function ExecutiveDashboardPage() {
+function ExecutiveDashboardPage({ authFetch }: { authFetch: AuthFetch }) {
   const [dashboard, setDashboard] = useState<ExecutiveDashboardSummary | null>(null);
   const [isLoadingDashboard, setIsLoadingDashboard] = useState(false);
   const [dashboardMessage, setDashboardMessage] = useState("Loading executive dashboard...");
@@ -231,7 +458,7 @@ function ExecutiveDashboardPage() {
     setIsLoadingDashboard(true);
 
     try {
-      const response = await fetch(`${apiBaseUrl}/dashboard/executive`);
+      const response = await authFetch(`${apiBaseUrl}/dashboard/executive`);
       const payload = (await response.json()) as ExecutiveDashboardSummary;
 
       if (!response.ok) {
@@ -349,6 +576,215 @@ function ExecutiveDashboardPage() {
   );
 }
 
+function DealerDashboardPage({ authFetch, user }: { authFetch: AuthFetch; user: AuthUser }) {
+  const [dealerCode, setDealerCode] = useState(user.dealerCode ?? "AT-BLR-001");
+  const [dealerSearch, setDealerSearch] = useState("");
+  const [dealerOptions, setDealerOptions] = useState<DealerLookupOption[]>([]);
+  const [isDealerDropdownOpen, setIsDealerDropdownOpen] = useState(false);
+  const [dashboard, setDashboard] = useState<DealerDashboardSummary | null>(null);
+  const [isLoadingDealerDashboard, setIsLoadingDealerDashboard] = useState(false);
+  const [message, setMessage] = useState("Loading assigned dealer dashboard...");
+
+  async function loadDealerDashboard() {
+    setIsLoadingDealerDashboard(true);
+
+    try {
+      const params = new URLSearchParams({ dealerCode });
+      const response = await authFetch(`${apiBaseUrl}/dashboard/dealer?${params.toString()}`);
+      const payload = (await response.json()) as DealerDashboardSummary;
+
+      if (!response.ok) {
+        throw new Error("Could not load dealer dashboard.");
+      }
+
+      setDashboard(payload);
+      setMessage(`Showing assigned dealer data for ${payload.dealer.name}.`);
+    } catch (error) {
+      setDashboard(null);
+      setMessage(error instanceof Error ? error.message : "Could not load dealer dashboard.");
+    } finally {
+      setIsLoadingDealerDashboard(false);
+    }
+  }
+
+  async function loadDealerOptions(search: string) {
+    if (user.role === "DealerUser") {
+      return;
+    }
+
+    const params = new URLSearchParams();
+
+    if (search.trim()) {
+      params.set("search", search.trim());
+    }
+
+    try {
+      const response = await authFetch(`${apiBaseUrl}/dashboard/dealers?${params.toString()}`);
+      const payload = (await response.json()) as { dealers: DealerLookupOption[] };
+
+      if (response.ok) {
+        setDealerOptions(payload.dealers);
+      }
+    } catch {
+      setDealerOptions([]);
+    }
+  }
+
+  useEffect(() => {
+    void loadDealerDashboard();
+  }, [dealerCode]);
+
+  useEffect(() => {
+    void loadDealerOptions(dealerSearch);
+  }, [dealerSearch, user.role]);
+
+  const scorecardMetrics = [
+    {
+      label: "CSI Score",
+      value: Math.round(dashboard?.scorecard.csiScore ?? 0),
+      benchmark: Math.round(dashboard?.scorecard.csiBenchmark ?? 0)
+    },
+    {
+      label: "NPS Score",
+      value: Math.round(dashboard?.scorecard.npsScore ?? 0),
+      benchmark: Math.round(dashboard?.scorecard.npsBenchmark ?? 0)
+    },
+    {
+      label: "Sentiment",
+      value: Math.round((dashboard?.scorecard.sentimentScore ?? 0) * 100),
+      benchmark: Math.round((dashboard?.scorecard.sentimentBenchmark ?? 0) * 100)
+    }
+  ];
+  const complaintRows = dashboard?.complaintVolume.length ? dashboard.complaintVolume.map((row) => ({ label: row.period, value: row.count })) : [
+    { label: "No feedback", value: 0 }
+  ];
+  const topIssueRows = dashboard?.topIssues.length ? dashboard.topIssues.map((row) => ({ label: row.category, value: row.count })) : [
+    { label: "No issues", value: 0 }
+  ];
+
+  return (
+    <section className="space-y-6 p-6">
+      <div className="flex flex-wrap items-center justify-between gap-4 rounded-2xl bg-white p-5 shadow-card">
+        <div>
+          <p className="text-xs font-black uppercase tracking-[0.18em] text-blue-600">Dealer Dashboard</p>
+          <h2 className="text-2xl font-black text-slate-950">{dashboard?.dealer.name ?? "Assigned Dealer"}</h2>
+          <p className="mt-1 text-sm text-slate-500">{message}</p>
+        </div>
+        <div className="flex flex-wrap items-end gap-3">
+          {user.role !== "DealerUser" ? (
+            <DealerSearchDropdown
+              dealerCode={dealerCode}
+              options={dealerOptions}
+              search={dealerSearch}
+              isOpen={isDealerDropdownOpen}
+              onSearchChange={(value) => {
+                setDealerSearch(value);
+                setIsDealerDropdownOpen(true);
+              }}
+              onFocus={() => {
+                setIsDealerDropdownOpen(true);
+                void loadDealerOptions(dealerSearch);
+              }}
+              onSelect={(dealer) => {
+                setDealerCode(dealer.code);
+                setDealerSearch(`${dealer.name} (${dealer.code})`);
+                setIsDealerDropdownOpen(false);
+              }}
+            />
+          ) : null}
+          <button
+            className="inline-flex items-center gap-2 rounded-xl border border-slate-200 px-3 py-2 text-sm font-bold text-slate-600 hover:bg-slate-50"
+            type="button"
+            onClick={() => void loadDealerDashboard()}
+          >
+            <RefreshCw size={16} className={isLoadingDealerDashboard ? "animate-spin" : ""} />
+            Refresh
+          </button>
+        </div>
+      </div>
+
+      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-5">
+        <MetricCard label="Feedback Volume" value={String(dashboard?.scorecard.feedbackCount ?? 0)} suffix="records" accent="blue" trend="dealer" />
+        <MetricCard label="Open CRM Tasks" value={String(dashboard?.openCrmTasks.length ?? 0)} suffix="tasks" accent="danger" trend="recovery" />
+        <MetricCard label="Open Escalations" value={String(dashboard?.scorecard.openEscalations ?? 0)} suffix="active" accent="amber" trend="ops" />
+        <MetricCard label="CSI vs Benchmark" value={String(Math.round(dashboard?.scorecard.csiScore ?? 0))} suffix={`/ ${Math.round(dashboard?.scorecard.csiBenchmark ?? 0)}`} accent="green" trend="bench" />
+        <MetricCard label="NPS vs Benchmark" value={String(Math.round(dashboard?.scorecard.npsScore ?? 0))} suffix={`/ ${Math.round(dashboard?.scorecard.npsBenchmark ?? 0)}`} accent="teal" trend="bench" />
+      </div>
+
+      <div className="grid gap-6 xl:grid-cols-3">
+        <DashboardPanel title="Scorecard Benchmark" subtitle="Current dealer vs network benchmark">
+          <div className="space-y-3">
+            {scorecardMetrics.map((metric) => (
+              <BenchmarkRow key={metric.label} {...metric} />
+            ))}
+          </div>
+        </DashboardPanel>
+        <DashboardPanel title="Complaint Volume" subtitle="Feedback records by month">
+          <DistributionList rows={complaintRows} tone="issue" />
+        </DashboardPanel>
+        <DashboardPanel title="Top Issues" subtitle="Primary categories for assigned dealer">
+          <DistributionList rows={topIssueRows} tone="issue" />
+        </DashboardPanel>
+      </div>
+
+      <div className="grid gap-6 xl:grid-cols-[1fr_420px]">
+        <DashboardPanel title="Sentiment Trend" subtitle="Monthly positive, neutral, negative, and mixed feedback">
+          <div className="space-y-3">
+            {(dashboard?.sentimentTrend.length ? dashboard.sentimentTrend : [{ period: "No data", positive: 0, neutral: 0, negative: 0, mixed: 0 }]).map((row) => (
+              <div key={row.period} className="rounded-xl bg-slate-50 p-3">
+                <div className="mb-2 flex items-center justify-between text-sm">
+                  <span className="font-bold text-slate-800">{row.period}</span>
+                  <span className="text-xs font-bold text-slate-400">{row.positive + row.neutral + row.negative + row.mixed} total</span>
+                </div>
+                <div className="grid grid-cols-4 gap-2 text-xs font-bold">
+                  <span className="rounded-lg bg-emerald-50 px-2 py-1 text-emerald-700">Positive {row.positive}</span>
+                  <span className="rounded-lg bg-slate-100 px-2 py-1 text-slate-600">Neutral {row.neutral}</span>
+                  <span className="rounded-lg bg-red-50 px-2 py-1 text-red-700">Negative {row.negative}</span>
+                  <span className="rounded-lg bg-amber-50 px-2 py-1 text-amber-700">Mixed {row.mixed}</span>
+                </div>
+              </div>
+            ))}
+          </div>
+        </DashboardPanel>
+
+        <DashboardPanel title="Open CRM Tasks" subtitle="Service recovery queue for assigned dealer">
+          <div className="space-y-3">
+            {(dashboard?.openCrmTasks.length ? dashboard.openCrmTasks : []).map((task) => (
+              <div key={task.id} className="rounded-xl border border-slate-100 bg-slate-50 p-3">
+                <div className="flex items-center justify-between gap-3">
+                  <h3 className="font-bold text-slate-900">{task.title}</h3>
+                  <Badge tone={urgencyTone(task.priority)}>{task.priority}</Badge>
+                </div>
+                <p className="mt-2 text-xs font-semibold text-slate-500">{task.status} · Due {task.dueAt ? new Date(task.dueAt).toLocaleDateString() : "not set"}</p>
+              </div>
+            ))}
+            {dashboard?.openCrmTasks.length === 0 || !dashboard ? (
+              <p className="rounded-xl bg-slate-50 p-4 text-sm font-semibold text-slate-500">No open CRM recovery tasks for this dealer.</p>
+            ) : null}
+          </div>
+        </DashboardPanel>
+      </div>
+    </section>
+  );
+}
+
+function BenchmarkRow({ label, value, benchmark }: { label: string; value: number; benchmark: number }) {
+  const delta = value - benchmark;
+
+  return (
+    <div className="rounded-xl bg-slate-50 p-3">
+      <div className="flex items-center justify-between gap-3">
+        <span className="font-bold text-slate-800">{label}</span>
+        <span className={`font-black ${delta >= 0 ? "text-emerald-600" : "text-red-600"}`}>
+          {delta >= 0 ? "+" : ""}
+          {delta}
+        </span>
+      </div>
+      <p className="mt-1 text-sm text-slate-500">Dealer {value} · Benchmark {benchmark}</p>
+    </div>
+  );
+}
+
 function DashboardInsightsSidebar({ criticalText }: { criticalText: string }) {
   return (
     <aside className="space-y-4">
@@ -357,7 +793,7 @@ function DashboardInsightsSidebar({ criticalText }: { criticalText: string }) {
           <span className="rounded-xl bg-indigo-100 p-2 text-indigo-600"><Sparkles size={20} /></span>
           <div>
             <h2 className="font-bold">AI Generated Insights</h2>
-            <p className="text-xs text-slate-500">Powered by AutoIndia CX Intelligence</p>
+            <p className="text-xs text-slate-500">Powered by VoC CX Intelligence</p>
           </div>
         </div>
         {["South India Surge", "Price Transparency Alert", "NCR Retention Drop"].map((item, index) => (
@@ -404,26 +840,36 @@ function DistributionList({ rows, tone }: { rows: Array<{ label: string; value: 
   );
 }
 
-function FeedbackWorkspacePage() {
+function FeedbackWorkspacePage({ authFetch, user }: { authFetch: AuthFetch; user: AuthUser }) {
+  const canUploadFeedback = user.role === "Admin" || user.role === "OemUser";
+  const pageTitle = canUploadFeedback ? "Upload And Explore Feedback" : user.role === "Reviewer" ? "Review And Explore Feedback" : "View Dealer Feedback";
+  const pageDescription = canUploadFeedback
+    ? "Load prototype feedback files, then inspect normalized records and NLP outputs from one workspace."
+    : user.role === "Reviewer"
+      ? "Inspect assigned feedback records, NLP outputs, issue classifications, urgency, and review actions from one workspace."
+      : "View your dealership feedback, sentiment, issue classifications, urgency, and related follow-up context from one workspace.";
+
   return (
     <section className="space-y-6 p-6">
       <div className="rounded-2xl bg-white p-5 shadow-card">
         <div className="flex flex-wrap items-center justify-between gap-4">
           <div>
             <p className="text-xs font-black uppercase tracking-[0.18em] text-blue-600">Feedback Workspace</p>
-            <h2 className="text-2xl font-black text-slate-950">Upload And Explore Feedback</h2>
-            <p className="mt-1 text-sm text-slate-500">Load prototype feedback files, then inspect normalized records and NLP outputs from one workspace.</p>
+            <h2 className="text-2xl font-black text-slate-950">{pageTitle}</h2>
+            <p className="mt-1 text-sm text-slate-500">{pageDescription}</p>
           </div>
-          <div className="flex items-center gap-2 rounded-xl bg-blue-50 px-3 py-2 text-sm font-bold text-blue-700">
-            <UploadCloud size={18} />
-            Accepted: .csv, .xlsx
-          </div>
+          {canUploadFeedback ? (
+            <div className="flex items-center gap-2 rounded-xl bg-blue-50 px-3 py-2 text-sm font-bold text-blue-700">
+              <UploadCloud size={18} />
+              Accepted: .csv, .xlsx
+            </div>
+          ) : null}
         </div>
       </div>
 
-      <div className="grid gap-6 xl:grid-cols-[360px_1fr]">
-        <FeedbackUploadCard />
-        <FeedbackExplorer />
+      <div className={`grid gap-6 ${canUploadFeedback ? "xl:grid-cols-[360px_1fr]" : ""}`}>
+        {canUploadFeedback ? <FeedbackUploadCard authFetch={authFetch} /> : null}
+        <FeedbackExplorer authFetch={authFetch} />
       </div>
     </section>
   );
@@ -437,7 +883,7 @@ interface UploadResult {
   insertedRows: number;
 }
 
-function FeedbackExplorer() {
+function FeedbackExplorer({ authFetch }: { authFetch: AuthFetch }) {
   const [filters, setFilters] = useState<ExplorerFilters>({
     sourceType: "",
     dealerName: "",
@@ -471,7 +917,7 @@ function FeedbackExplorer() {
     setIsLoading(true);
 
     try {
-      const response = await fetch(`${apiBaseUrl}/feedback?${params.toString()}`);
+      const response = await authFetch(`${apiBaseUrl}/feedback?${params.toString()}`);
       const payload = (await response.json()) as FeedbackListResponse;
 
       if (!response.ok) {
@@ -496,7 +942,7 @@ function FeedbackExplorer() {
     setIsDetailLoading(true);
 
     try {
-      const response = await fetch(`${apiBaseUrl}/feedback/${feedbackId}`);
+      const response = await authFetch(`${apiBaseUrl}/feedback/${feedbackId}`);
       const payload = (await response.json()) as FeedbackDetail;
 
       if (!response.ok) {
@@ -741,12 +1187,70 @@ function FilterSelect({ label, value, values, onChange }: { label: string; value
   );
 }
 
-function FilterInput({ label, value, placeholder, type = "text", onChange }: { label: string; value: string; placeholder?: string; type?: string; onChange: (value: string) => void }) {
+function FilterInput({ label, value, placeholder, type = "text", disabled = false, onChange }: { label: string; value: string; placeholder?: string; type?: string; disabled?: boolean; onChange: (value: string) => void }) {
   return (
     <label className="text-xs font-bold uppercase tracking-wide text-slate-400">
       {label}
-      <input className="mt-1 w-full rounded-xl border border-slate-200 px-3 py-2 text-sm font-semibold text-slate-700" type={type} value={value} placeholder={placeholder} onChange={(event) => onChange(event.target.value)} />
+      <input className="mt-1 w-full rounded-xl border border-slate-200 px-3 py-2 text-sm font-semibold text-slate-700 disabled:bg-slate-100" type={type} value={value} placeholder={placeholder} disabled={disabled} onChange={(event) => onChange(event.target.value)} />
     </label>
+  );
+}
+
+function DealerSearchDropdown({
+  dealerCode,
+  search,
+  options,
+  isOpen,
+  onSearchChange,
+  onFocus,
+  onSelect
+}: {
+  dealerCode: string;
+  search: string;
+  options: DealerLookupOption[];
+  isOpen: boolean;
+  onSearchChange: (value: string) => void;
+  onFocus: () => void;
+  onSelect: (dealer: DealerLookupOption) => void;
+}) {
+  return (
+    <div className="relative min-w-[320px] text-xs font-bold uppercase tracking-wide text-slate-400">
+      <label>
+        Dealer
+        <div className="mt-1 flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-semibold normal-case tracking-normal text-slate-700 focus-within:border-blue-400">
+          <Search size={16} className="text-slate-400" />
+          <input
+            className="w-full border-0 bg-transparent p-0 text-sm font-semibold outline-none placeholder:text-slate-400"
+            value={search}
+            placeholder="Search dealer name, code, city..."
+            onChange={(event) => onSearchChange(event.target.value)}
+            onFocus={onFocus}
+          />
+        </div>
+      </label>
+      <p className="mt-1 text-xs font-semibold normal-case tracking-normal text-slate-500">Selected dealer code: {dealerCode}</p>
+      {isOpen ? (
+        <div className="absolute left-0 right-0 z-30 mt-2 max-h-72 overflow-auto rounded-xl border border-slate-200 bg-white py-2 shadow-card">
+          {options.length ? (
+            options.map((dealer) => (
+              <button
+                key={dealer.id}
+                className="w-full px-3 py-2 text-left normal-case tracking-normal hover:bg-blue-50"
+                type="button"
+                onClick={() => onSelect(dealer)}
+              >
+                <span className="block text-sm font-black text-slate-900">{dealer.name}</span>
+                <span className="block text-xs font-semibold text-slate-500">
+                  {dealer.code} - {dealer.city}, {dealer.state} - {dealer.region}
+                </span>
+              </button>
+            ))
+          ) : (
+            <p className="px-3 py-3 text-sm font-semibold normal-case tracking-normal text-slate-500">No active dealers found.</p>
+          )}
+        </div>
+      ) : null}
+    </div>
   );
 }
 
@@ -816,7 +1320,7 @@ function formatPercent(value: number | null | undefined) {
   return typeof value === "number" ? `${Math.round(value * 100)}%` : "Pending";
 }
 
-function FeedbackUploadCard() {
+function FeedbackUploadCard({ authFetch }: { authFetch: AuthFetch }) {
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [isUploading, setIsUploading] = useState(false);
   const [message, setMessage] = useState<string>("Accepted formats: .csv and .xlsx only.");
@@ -834,7 +1338,7 @@ function FeedbackUploadCard() {
     setMessage("Uploading feedback data...");
 
     try {
-      const response = await fetch(`${import.meta.env.VITE_API_BASE_URL}/uploads/feedback`, {
+      const response = await authFetch(`${apiBaseUrl}/uploads/feedback`, {
         method: "POST",
         body: formData
       });
