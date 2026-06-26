@@ -1,5 +1,6 @@
 import { pool } from "../db/pool.js";
 import { processFeedbackIssueClassification } from "./issueClassificationService.js";
+import { detectRepeatComplaint } from "./repeatComplaintService.js";
 
 type UrgencyLevel = "Low" | "Medium" | "High" | "Critical";
 
@@ -62,9 +63,6 @@ async function loadUrgencyContext(feedbackRecordId: string) {
   const result = await pool.query<{
     id: string;
     processedText: string;
-    feedbackDate: string;
-    customerId: string | null;
-    vehicleId: string | null;
     sentimentLabel: string;
     category: string;
     explanation: string | null;
@@ -73,9 +71,6 @@ async function loadUrgencyContext(feedbackRecordId: string) {
       SELECT
         fr.id,
         COALESCE(nr.translated_text, fr.masked_text, fr.raw_text) AS "processedText",
-        fr.feedback_date AS "feedbackDate",
-        fr.customer_id AS "customerId",
-        fr.vehicle_id AS "vehicleId",
         COALESCE(nr.sentiment_label::text, 'Unknown') AS "sentimentLabel",
         ic.category::text AS category,
         ic.explanation
@@ -88,31 +83,6 @@ async function loadUrgencyContext(feedbackRecordId: string) {
   );
 
   return result.rows[0] ?? null;
-}
-
-async function countRepeatComplaints(feedbackRecordId: string, customerId: string | null, vehicleId: string | null, feedbackDate: string) {
-  if (!customerId && !vehicleId) {
-    return 0;
-  }
-
-  const result = await pool.query<{ repeatCount: number }>(
-    `
-      SELECT COUNT(*)::int AS "repeatCount"
-      FROM feedback_records fr
-      LEFT JOIN nlp_results nr ON nr.feedback_record_id = fr.id
-      WHERE fr.id <> $1::uuid
-        AND fr.feedback_date >= $2::timestamptz - INTERVAL '90 days'
-        AND fr.feedback_date <= $2::timestamptz
-        AND (
-          ($3::uuid IS NOT NULL AND fr.customer_id = $3::uuid)
-          OR ($4::uuid IS NOT NULL AND fr.vehicle_id = $4::uuid)
-        )
-        AND COALESCE(nr.sentiment_label::text, 'Unknown') IN ('Negative', 'Mixed', 'Unknown')
-    `,
-    [feedbackRecordId, feedbackDate, customerId, vehicleId]
-  );
-
-  return result.rows[0]?.repeatCount ?? 0;
 }
 
 function calculateUrgencyScore(context: Awaited<ReturnType<typeof loadUrgencyContext>>, repeatComplaintCount: number) {
@@ -137,7 +107,7 @@ function calculateUrgencyScore(context: Awaited<ReturnType<typeof loadUrgencyCon
   if (repeatComplaintCount > 0) {
     const repeatScore = Math.min(repeatComplaintCount * 14, 28);
     score += repeatScore;
-    factors.push(`repeatComplaints90Days=${repeatComplaintCount} +${repeatScore}`);
+    factors.push(`repeatComplaints=${repeatComplaintCount} +${repeatScore}`);
   }
 
   if (severeComplaintPattern.test(context.processedText)) {
@@ -185,7 +155,8 @@ export async function processFeedbackUrgency(feedbackRecordId: string) {
     return null;
   }
 
-  const repeatComplaintCount = await countRepeatComplaints(context.id, context.customerId, context.vehicleId, context.feedbackDate);
+  const repeatComplaint = await detectRepeatComplaint(context.id);
+  const repeatComplaintCount = repeatComplaint?.repeatCount ?? 0;
   const { urgencyScore, factors } = calculateUrgencyScore(context, repeatComplaintCount);
   const urgencyLevel = scoreToUrgencyLevel(urgencyScore);
 

@@ -227,9 +227,26 @@ The batch endpoint accepts an optional JSON body:
 
 Feedback details include `issueClassifications` and `reviewItems` after classification runs.
 
+## Repeat Complaint Detection
+
+VOC-014 repeat complaint detection flags feedback when another record exists for the same customer or vehicle inside `REPEAT_COMPLAINT_LOOKBACK_DAYS`. Results are stored in `repeat_complaint_signals`, returned in feedback list/detail responses, and used by urgency scoring.
+
+```text
+POST /api/v1/feedback/:id/repeat-complaints
+POST /api/v1/feedback/repeat-complaints/run
+```
+
+The batch endpoint accepts an optional JSON body:
+
+```json
+{
+  "limit": 25
+}
+```
+
 ## Urgency Scoring
 
-VOC-010 urgency scoring calculates a 0-100 prototype score from sentiment, primary issue category, repeat complaints in the previous 90 days, and severity keywords. The score is returned by the API, and the resulting `urgencyLevel` is stored on the primary issue classification for dashboard and feedback explorer filtering.
+VOC-010 urgency scoring calculates a 0-100 prototype score from sentiment, primary issue category, repeat complaint signals, and severity keywords. The score is returned by the API, and the resulting `urgencyLevel` is stored on the primary issue classification for dashboard and feedback explorer filtering.
 
 ```text
 POST /api/v1/feedback/:id/urgency
@@ -245,6 +262,23 @@ The batch endpoint accepts an optional JSON body:
 ```
 
 Critical feedback is flagged with `isCritical: true` in the urgency response and `urgencyLevel: Critical` in feedback list/detail data.
+
+## Churn Risk Scoring
+
+VOC-015 churn risk scoring assigns customer risk from sentiment, repeat complaints, urgency, issue category, and recent service-history signals. Results are stored in `churn_scores`, returned in Feedback Explorer, and summarized on Executive and Dealer dashboards.
+
+```text
+POST /api/v1/feedback/:id/churn-risk
+POST /api/v1/feedback/churn-risk/run
+```
+
+The batch endpoint accepts an optional JSON body:
+
+```json
+{
+  "limit": 25
+}
+```
 
 ## Executive Dashboard
 

@@ -18,6 +18,7 @@ export interface DealerDashboardSummary {
     sentimentBenchmark: number | null;
     feedbackCount: number;
     openEscalations: number;
+    highRiskCustomers: number;
   };
   complaintVolume: Array<{ period: string; count: number }>;
   sentimentTrend: Array<{ period: string; positive: number; neutral: number; negative: number; mixed: number }>;
@@ -107,7 +108,14 @@ export async function getDealerDashboardSummary(filters: { dealerCode?: string; 
           current_score.sentiment_score::float AS "sentimentScore",
           benchmark.sentiment_benchmark::float AS "sentimentBenchmark",
           COALESCE(current_score.feedback_count, 0)::int AS "feedbackCount",
-          COALESCE(current_score.open_escalations, 0)::int AS "openEscalations"
+          COALESCE(current_score.open_escalations, 0)::int AS "openEscalations",
+          (
+            SELECT COUNT(DISTINCT cs.customer_id)::int
+            FROM churn_scores cs
+            JOIN feedback_records fr ON fr.id = cs.feedback_record_id
+            WHERE fr.dealer_id = $1::uuid
+              AND cs.risk_level IN ('High'::"ChurnRiskLevel", 'Critical'::"ChurnRiskLevel")
+          ) AS "highRiskCustomers"
         FROM latest_scores current_score
         CROSS JOIN (
           SELECT
@@ -188,7 +196,8 @@ export async function getDealerDashboardSummary(filters: { dealerCode?: string; 
       sentimentScore: null,
       sentimentBenchmark: null,
       feedbackCount: 0,
-      openEscalations: 0
+      openEscalations: 0,
+      highRiskCustomers: 0
     },
     complaintVolume: complaintVolume.rows,
     sentimentTrend: sentimentTrend.rows,

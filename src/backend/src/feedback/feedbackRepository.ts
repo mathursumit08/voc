@@ -13,6 +13,7 @@ const allowedSourceTypes = new Set([
 
 const allowedProcessingStatuses = new Set(["Pending", "Processing", "Completed", "Failed", "NeedsReview"]);
 const allowedUrgencyLevels = new Set(["Low", "Medium", "High", "Critical"]);
+const allowedChurnRiskLevels = new Set(["Low", "Medium", "High", "Critical"]);
 const allowedSentimentLabels = new Set(["Positive", "Neutral", "Negative", "Mixed", "Unknown"]);
 const allowedIssueCategories = new Set([
   "ServiceQuality",
@@ -37,6 +38,7 @@ export interface FeedbackFilters {
   customerId?: string;
   vehicleId?: string;
   urgencyLevel?: string;
+  churnRiskLevel?: string;
   sentimentLabel?: string;
   issueCategory?: string;
   vehicleModel?: string;
@@ -57,6 +59,10 @@ export function validateFeedbackFilters(filters: FeedbackFilters) {
 
   if (filters.urgencyLevel && !allowedUrgencyLevels.has(filters.urgencyLevel)) {
     throw new Error(`Invalid urgencyLevel filter: ${filters.urgencyLevel}`);
+  }
+
+  if (filters.churnRiskLevel && !allowedChurnRiskLevels.has(filters.churnRiskLevel)) {
+    throw new Error(`Invalid churnRiskLevel filter: ${filters.churnRiskLevel}`);
   }
 
   if (filters.sentimentLabel && !allowedSentimentLabels.has(filters.sentimentLabel)) {
@@ -111,6 +117,10 @@ export async function listFeedbackRecords(filters: FeedbackFilters) {
     addCondition("primary_issue.urgency_level = ?::\"UrgencyLevel\"", filters.urgencyLevel);
   }
 
+  if (filters.churnRiskLevel) {
+    addCondition("latest_churn.risk_level = ?::\"ChurnRiskLevel\"", filters.churnRiskLevel);
+  }
+
   if (filters.sentimentLabel) {
     addCondition("nr.sentiment_label = ?::\"SentimentLabel\"", filters.sentimentLabel);
   }
@@ -158,6 +168,10 @@ export async function listFeedbackRecords(filters: FeedbackFilters) {
         nr.topics,
         primary_issue.category AS "issueCategory",
         primary_issue.urgency_level AS "urgencyLevel",
+        COALESCE(rcs.is_repeat, false) AS "isRepeatComplaint",
+        COALESCE(rcs.repeat_count, 0)::int AS "repeatComplaintCount",
+        latest_churn.score::float AS "churnRiskScore",
+        latest_churn.risk_level::text AS "churnRiskLevel",
         COUNT(*) OVER()::int AS "totalCount"
       FROM feedback_records fr
       LEFT JOIN dealers d ON d.id = fr.dealer_id
@@ -165,6 +179,14 @@ export async function listFeedbackRecords(filters: FeedbackFilters) {
       LEFT JOIN vehicles v ON v.id = fr.vehicle_id
       LEFT JOIN nlp_results nr ON nr.feedback_record_id = fr.id
       LEFT JOIN issue_classifications primary_issue ON primary_issue.feedback_record_id = fr.id AND primary_issue.is_primary = true
+      LEFT JOIN repeat_complaint_signals rcs ON rcs.feedback_record_id = fr.id
+      LEFT JOIN LATERAL (
+        SELECT score, risk_level
+        FROM churn_scores cs
+        WHERE cs.feedback_record_id = fr.id
+        ORDER BY cs.scored_at DESC
+        LIMIT 1
+      ) latest_churn ON true
       ${whereClause}
       ORDER BY fr.feedback_date DESC, fr.created_at DESC
       LIMIT ${limitParam}
@@ -256,6 +278,26 @@ export async function getFeedbackRecordById(id: string, filters?: { dealerCode?:
           ),
           '[]'::jsonb
         ) AS "reviewItems",
+        CASE
+          WHEN rcs.id IS NULL THEN NULL
+          ELSE jsonb_build_object(
+            'isRepeat', rcs.is_repeat,
+            'repeatCount', rcs.repeat_count,
+            'lookbackDays', rcs.lookback_days,
+            'matchingFeedbackRecordIds', rcs.matching_feedback_record_ids,
+            'reasonSummary', rcs.reason_summary,
+            'detectedAt', rcs.detected_at
+          )
+        END AS "repeatComplaintSignal",
+        CASE
+          WHEN latest_churn.id IS NULL THEN NULL
+          ELSE jsonb_build_object(
+            'score', latest_churn.score,
+            'riskLevel', latest_churn.risk_level,
+            'reasonSummary', latest_churn.reason_summary,
+            'scoredAt', latest_churn.scored_at
+          )
+        END AS "churnRisk",
         jsonb_build_object('id', d.id, 'name', d.name, 'code', d.code, 'region', d.region) AS dealer,
         jsonb_build_object('id', c.id, 'maskedName', c.masked_name, 'city', c.city, 'state', c.state) AS customer,
         jsonb_build_object('id', v.id, 'model', v.model, 'variant', v.variant, 'modelYear', v.model_year) AS vehicle,
@@ -268,6 +310,14 @@ export async function getFeedbackRecordById(id: string, filters?: { dealerCode?:
       LEFT JOIN job_cards jc ON jc.id = fr.job_card_id
       LEFT JOIN warranty_claims wc ON wc.id = fr.warranty_claim_id
       LEFT JOIN nlp_results nr ON nr.feedback_record_id = fr.id
+      LEFT JOIN repeat_complaint_signals rcs ON rcs.feedback_record_id = fr.id
+      LEFT JOIN LATERAL (
+        SELECT id, score, risk_level, reason_summary, scored_at
+        FROM churn_scores cs
+        WHERE cs.feedback_record_id = fr.id
+        ORDER BY cs.scored_at DESC
+        LIMIT 1
+      ) latest_churn ON true
       WHERE fr.id = $1::uuid
       ${dealerScopeSql};
     `,

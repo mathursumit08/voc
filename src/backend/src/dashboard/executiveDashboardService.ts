@@ -5,8 +5,10 @@ export interface ExecutiveDashboardSummary {
   positiveFeedback: number;
   negativeFeedback: number;
   criticalFeedback: number;
+  highRiskCustomers: number;
   openWarrantySignals: number;
   sentimentDistribution: Array<{ label: string; count: number }>;
+  churnRiskDistribution: Array<{ label: string; count: number }>;
   topIssueCategories: Array<{ category: string; count: number }>;
   dealerComparison: Array<{
     dealerId: string;
@@ -23,13 +25,14 @@ export interface ExecutiveDashboardSummary {
 
 export async function getExecutiveDashboardSummary(): Promise<ExecutiveDashboardSummary> {
   // Dashboard queries intentionally follow indexed reporting paths defined in the prototype schema.
-  const [totals, sentimentDistribution, topIssueCategories, dealerComparison] = await Promise.all([
+  const [totals, sentimentDistribution, churnRiskDistribution, topIssueCategories, dealerComparison] = await Promise.all([
     pool.query<{
       totalFeedback: number;
       positiveFeedback: number;
       negativeFeedback: number;
       criticalFeedback: number;
       openWarrantySignals: number;
+      highRiskCustomers: number;
     }>(
       `
         SELECT
@@ -37,6 +40,11 @@ export async function getExecutiveDashboardSummary(): Promise<ExecutiveDashboard
           (SELECT COUNT(*)::int FROM nlp_results WHERE sentiment_label = 'Positive'::"SentimentLabel") AS "positiveFeedback",
           (SELECT COUNT(*)::int FROM nlp_results WHERE sentiment_label = 'Negative'::"SentimentLabel") AS "negativeFeedback",
           (SELECT COUNT(*)::int FROM issue_classifications WHERE urgency_level = 'Critical'::"UrgencyLevel") AS "criticalFeedback",
+          (
+            SELECT COUNT(DISTINCT customer_id)::int
+            FROM churn_scores
+            WHERE risk_level IN ('High'::"ChurnRiskLevel", 'Critical'::"ChurnRiskLevel")
+          ) AS "highRiskCustomers",
           (SELECT COUNT(*)::int FROM warranty_signals WHERE status IN ('Open'::"SignalStatus", 'UnderReview'::"SignalStatus", 'Escalated'::"SignalStatus")) AS "openWarrantySignals"
       `
     ),
@@ -46,6 +54,14 @@ export async function getExecutiveDashboardSummary(): Promise<ExecutiveDashboard
         FROM nlp_results
         GROUP BY sentiment_label
         ORDER BY count DESC, sentiment_label ASC
+      `
+    ),
+    pool.query<{ label: string; count: number }>(
+      `
+        SELECT risk_level::text AS label, COUNT(DISTINCT customer_id)::int AS count
+        FROM churn_scores
+        GROUP BY risk_level
+        ORDER BY count DESC, risk_level ASC
       `
     ),
     pool.query<{ category: string; count: number }>(
@@ -84,8 +100,10 @@ export async function getExecutiveDashboardSummary(): Promise<ExecutiveDashboard
     positiveFeedback: totals.rows[0]?.positiveFeedback ?? 0,
     negativeFeedback: totals.rows[0]?.negativeFeedback ?? 0,
     criticalFeedback: totals.rows[0]?.criticalFeedback ?? 0,
+    highRiskCustomers: totals.rows[0]?.highRiskCustomers ?? 0,
     openWarrantySignals: totals.rows[0]?.openWarrantySignals ?? 0,
     sentimentDistribution: sentimentDistribution.rows,
+    churnRiskDistribution: churnRiskDistribution.rows,
     topIssueCategories: topIssueCategories.rows,
     dealerComparison: dealerComparison.rows
   };
