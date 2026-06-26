@@ -106,6 +106,7 @@ model Customer {
   crmTasks         CrmTask[]
   jobCards         JobCard[]
   warrantyClaims   WarrantyClaim[]
+  repeatSignals    RepeatComplaintSignal[]
 
   @@index([state, city])
   @@map("customers")
@@ -127,6 +128,7 @@ model Vehicle {
   warrantyClaims  WarrantyClaim[]
   feedbackRecords FeedbackRecord[]
   churnScores     ChurnScore[]
+  repeatSignals   RepeatComplaintSignal[]
 
   @@index([customerId])
   @@index([model, variant])
@@ -257,6 +259,7 @@ model FeedbackRecord {
   warrantySignals      WarrantySignal[]
   crmTasks             CrmTask[]
   reviewItems          HumanReviewQueue[]
+  repeatComplaintSignal RepeatComplaintSignal?
 
   @@unique([sourceType, sourceReferenceId])
   @@index([processingStatus, feedbackDate])
@@ -267,6 +270,30 @@ model FeedbackRecord {
   @@index([jobCardId])
   @@index([warrantyClaimId])
   @@map("feedback_records")
+}
+
+model RepeatComplaintSignal {
+  id                        String         @id @default(uuid()) @db.Uuid
+  feedbackRecordId          String         @unique @map("feedback_record_id") @db.Uuid
+  customerId                String?        @map("customer_id") @db.Uuid
+  vehicleId                 String?        @map("vehicle_id") @db.Uuid
+  lookbackDays              Int            @map("lookback_days")
+  repeatCount               Int            @default(0) @map("repeat_count")
+  matchingFeedbackRecordIds String[]       @map("matching_feedback_record_ids") @db.Uuid
+  isRepeat                  Boolean        @default(false) @map("is_repeat")
+  reasonSummary             String?        @map("reason_summary")
+  detectedAt                DateTime       @default(now()) @map("detected_at")
+  createdAt                 DateTime       @default(now()) @map("created_at")
+  updatedAt                 DateTime       @updatedAt @map("updated_at")
+  feedbackRecord            FeedbackRecord @relation(fields: [feedbackRecordId], references: [id])
+  customer                  Customer?      @relation(fields: [customerId], references: [id])
+  vehicle                   Vehicle?       @relation(fields: [vehicleId], references: [id])
+
+  @@index([customerId, detectedAt])
+  @@index([vehicleId, detectedAt])
+  @@index([isRepeat, detectedAt])
+  @@index([repeatCount])
+  @@map("repeat_complaint_signals")
 }
 
 model NlpResult {

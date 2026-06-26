@@ -395,6 +395,14 @@ export const openApiDocument = {
             }
           },
           {
+            name: "churnRiskLevel",
+            in: "query",
+            schema: {
+              type: "string",
+              enum: ["Low", "Medium", "High", "Critical"]
+            }
+          },
+          {
             name: "dateFrom",
             in: "query",
             schema: {
@@ -697,12 +705,174 @@ export const openApiDocument = {
         }
       }
     },
+    "/feedback/repeat-complaints/run": {
+      post: {
+        tags: ["Feedback"],
+        summary: "Run repeat complaint detection for pending feedback",
+        description:
+          "Detects prior feedback for the same customer or vehicle inside the configured repeat complaint lookback period.",
+        operationId: "runPendingRepeatComplaintDetection",
+        requestBody: {
+          required: false,
+          content: {
+            "application/json": {
+              schema: {
+                type: "object",
+                properties: {
+                  limit: {
+                    type: "integer",
+                    minimum: 1,
+                    maximum: 100,
+                    default: 25
+                  }
+                }
+              }
+            }
+          }
+        },
+        responses: {
+          "200": {
+            description: "Repeat complaint detection completed",
+            content: {
+              "application/json": {
+                schema: {
+                  $ref: "#/components/schemas/RepeatComplaintBatchResult"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/feedback/{id}/repeat-complaints": {
+      post: {
+        tags: ["Feedback"],
+        summary: "Run repeat complaint detection for one feedback record",
+        description:
+          "Stores a repeat complaint signal for the feedback record using customer and vehicle matches inside the configured lookback period.",
+        operationId: "runFeedbackRepeatComplaintDetection",
+        parameters: [
+          {
+            name: "id",
+            in: "path",
+            required: true,
+            schema: {
+              type: "string",
+              format: "uuid"
+            }
+          }
+        ],
+        responses: {
+          "200": {
+            description: "Repeat complaint signal stored",
+            content: {
+              "application/json": {
+                schema: {
+                  $ref: "#/components/schemas/RepeatComplaintResult"
+                }
+              }
+            }
+          },
+          "404": {
+            description: "Feedback record not found",
+            content: {
+              "application/json": {
+                schema: {
+                  $ref: "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/feedback/churn-risk/run": {
+      post: {
+        tags: ["Feedback"],
+        summary: "Run churn risk scoring for pending feedback",
+        description:
+          "Generates customer churn risk scores using sentiment, repeat complaints, urgency, issue category, and recent service history signals.",
+        operationId: "runPendingChurnRiskScoring",
+        requestBody: {
+          required: false,
+          content: {
+            "application/json": {
+              schema: {
+                type: "object",
+                properties: {
+                  limit: {
+                    type: "integer",
+                    minimum: 1,
+                    maximum: 100,
+                    default: 25
+                  }
+                }
+              }
+            }
+          }
+        },
+        responses: {
+          "200": {
+            description: "Churn risk scoring completed",
+            content: {
+              "application/json": {
+                schema: {
+                  $ref: "#/components/schemas/ChurnRiskBatchResult"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/feedback/{id}/churn-risk": {
+      post: {
+        tags: ["Feedback"],
+        summary: "Run churn risk scoring for one feedback record",
+        description:
+          "Stores a churn score and reason summary for a customer-linked feedback record.",
+        operationId: "runFeedbackChurnRiskScoring",
+        parameters: [
+          {
+            name: "id",
+            in: "path",
+            required: true,
+            schema: {
+              type: "string",
+              format: "uuid"
+            }
+          }
+        ],
+        responses: {
+          "200": {
+            description: "Churn risk score stored",
+            content: {
+              "application/json": {
+                schema: {
+                  $ref: "#/components/schemas/ChurnRiskResult"
+                }
+              }
+            }
+          },
+          "404": {
+            description: "Feedback record not found or not linked to a customer",
+            content: {
+              "application/json": {
+                schema: {
+                  $ref: "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/feedback/urgency/run": {
       post: {
         tags: ["Feedback"],
         summary: "Run urgency scoring for pending feedback",
         description:
-          "Calculates urgency from sentiment, primary issue category, repeat complaints in the last 90 days, and severity keywords. The resulting urgency level is stored on the primary issue classification.",
+          "Calculates urgency from sentiment, primary issue category, repeat complaint signals, and severity keywords. The resulting urgency level is stored on the primary issue classification.",
         operationId: "runPendingFeedbackUrgency",
         requestBody: {
           required: false,
@@ -946,8 +1116,10 @@ export const openApiDocument = {
           "positiveFeedback",
           "negativeFeedback",
           "criticalFeedback",
+          "highRiskCustomers",
           "openWarrantySignals",
           "sentimentDistribution",
+          "churnRiskDistribution",
           "topIssueCategories",
           "dealerComparison"
         ],
@@ -964,10 +1136,19 @@ export const openApiDocument = {
           criticalFeedback: {
             type: "integer"
           },
+          highRiskCustomers: {
+            type: "integer"
+          },
           openWarrantySignals: {
             type: "integer"
           },
           sentimentDistribution: {
+            type: "array",
+            items: {
+              $ref: "#/components/schemas/DashboardCount"
+            }
+          },
+          churnRiskDistribution: {
             type: "array",
             items: {
               $ref: "#/components/schemas/DashboardCount"
@@ -1047,7 +1228,8 @@ export const openApiDocument = {
               sentimentScore: { type: "number", nullable: true },
               sentimentBenchmark: { type: "number", nullable: true },
               feedbackCount: { type: "integer" },
-              openEscalations: { type: "integer" }
+              openEscalations: { type: "integer" },
+              highRiskCustomers: { type: "integer" }
             }
           },
           complaintVolume: {
@@ -1250,6 +1432,24 @@ export const openApiDocument = {
             ]
           },
           urgencyLevel: {
+            type: "string",
+            nullable: true,
+            enum: ["Low", "Medium", "High", "Critical"]
+          },
+          isRepeatComplaint: {
+            type: "boolean",
+            description: "True when repeat complaint detection found prior feedback for the same customer or vehicle."
+          },
+          repeatComplaintCount: {
+            type: "integer",
+            example: 2
+          },
+          churnRiskScore: {
+            type: "number",
+            nullable: true,
+            example: 74
+          },
+          churnRiskLevel: {
             type: "string",
             nullable: true,
             enum: ["Low", "Medium", "High", "Critical"]
@@ -1566,6 +1766,168 @@ export const openApiDocument = {
           }
         }
       },
+      RepeatComplaintSignal: {
+        type: "object",
+        nullable: true,
+        properties: {
+          isRepeat: {
+            type: "boolean",
+            example: true
+          },
+          repeatCount: {
+            type: "integer",
+            example: 2
+          },
+          lookbackDays: {
+            type: "integer",
+            example: 90
+          },
+          matchingFeedbackRecordIds: {
+            type: "array",
+            items: {
+              type: "string",
+              format: "uuid"
+            }
+          },
+          reasonSummary: {
+            type: "string",
+            nullable: true
+          },
+          detectedAt: {
+            type: "string",
+            format: "date-time"
+          }
+        }
+      },
+      RepeatComplaintResult: {
+        type: "object",
+        required: ["feedbackRecordId", "lookbackDays", "repeatCount", "isRepeat", "matchingFeedbackRecordIds", "reasonSummary"],
+        properties: {
+          feedbackRecordId: {
+            type: "string",
+            format: "uuid"
+          },
+          lookbackDays: {
+            type: "integer",
+            example: 90
+          },
+          repeatCount: {
+            type: "integer",
+            example: 2
+          },
+          isRepeat: {
+            type: "boolean",
+            example: true
+          },
+          matchingFeedbackRecordIds: {
+            type: "array",
+            items: {
+              type: "string",
+              format: "uuid"
+            }
+          },
+          reasonSummary: {
+            type: "string",
+            example: "2 prior feedback record(s) found for the same customer or vehicle within 90 days."
+          }
+        }
+      },
+      RepeatComplaintBatchResult: {
+        type: "object",
+        required: ["requestedLimit", "processedCount", "records"],
+        properties: {
+          requestedLimit: {
+            type: "integer",
+            example: 25
+          },
+          processedCount: {
+            type: "integer",
+            example: 16
+          },
+          records: {
+            type: "array",
+            items: {
+              $ref: "#/components/schemas/RepeatComplaintResult"
+            }
+          }
+        }
+      },
+      ChurnRiskScore: {
+        type: "object",
+        nullable: true,
+        properties: {
+          score: {
+            type: "number",
+            example: 74
+          },
+          riskLevel: {
+            type: "string",
+            enum: ["Low", "Medium", "High", "Critical"]
+          },
+          reasonSummary: {
+            type: "string",
+            nullable: true
+          },
+          scoredAt: {
+            type: "string",
+            format: "date-time"
+          }
+        }
+      },
+      ChurnRiskResult: {
+        type: "object",
+        required: ["feedbackRecordId", "customerId", "score", "riskLevel", "reasonSummary"],
+        properties: {
+          feedbackRecordId: {
+            type: "string",
+            format: "uuid"
+          },
+          customerId: {
+            type: "string",
+            format: "uuid"
+          },
+          vehicleId: {
+            type: "string",
+            format: "uuid",
+            nullable: true
+          },
+          score: {
+            type: "number",
+            minimum: 0,
+            maximum: 100,
+            example: 74
+          },
+          riskLevel: {
+            type: "string",
+            enum: ["Low", "Medium", "High", "Critical"],
+            example: "High"
+          },
+          reasonSummary: {
+            type: "string",
+            example: "Churn score: 74/100. Factors: sentiment=Negative +28; urgency=High +18."
+          }
+        }
+      },
+      ChurnRiskBatchResult: {
+        type: "object",
+        required: ["requestedLimit", "processedCount", "records"],
+        properties: {
+          requestedLimit: {
+            type: "integer",
+            example: 25
+          },
+          processedCount: {
+            type: "integer",
+            example: 16
+          },
+          records: {
+            type: "array",
+            items: {
+              $ref: "#/components/schemas/ChurnRiskResult"
+            }
+          }
+        }
+      },
       UrgencyProcessingResult: {
         type: "object",
         required: ["feedbackRecordId", "urgencyScore", "urgencyLevel", "isCritical", "repeatComplaintCount", "factors"],
@@ -1721,6 +2083,12 @@ export const openApiDocument = {
                 items: {
                   $ref: "#/components/schemas/ReviewQueueItem"
                 }
+              },
+              repeatComplaintSignal: {
+                $ref: "#/components/schemas/RepeatComplaintSignal"
+              },
+              churnRisk: {
+                $ref: "#/components/schemas/ChurnRiskScore"
               }
             }
           }

@@ -29,6 +29,7 @@ const issueCategories = [
   "Other"
 ];
 const urgencyLevels = ["Low", "Medium", "High", "Critical"];
+const churnRiskLevels = ["Low", "Medium", "High", "Critical"];
 const pageSizeOptions = [10, 25, 50, 100];
 
 interface FeedbackSummary {
@@ -48,6 +49,10 @@ interface FeedbackSummary {
   topics: string[] | null;
   issueCategory: string | null;
   urgencyLevel: string | null;
+  isRepeatComplaint: boolean;
+  repeatComplaintCount: number;
+  churnRiskScore: number | null;
+  churnRiskLevel: string | null;
 }
 
 interface FeedbackDetail extends FeedbackSummary {
@@ -76,6 +81,20 @@ interface FeedbackDetail extends FeedbackSummary {
     reason: string;
     assignedTo: string | null;
   }>;
+  repeatComplaintSignal: {
+    isRepeat: boolean;
+    repeatCount: number;
+    lookbackDays: number;
+    matchingFeedbackRecordIds: string[];
+    reasonSummary: string | null;
+    detectedAt: string;
+  } | null;
+  churnRisk: {
+    score: number;
+    riskLevel: string;
+    reasonSummary: string | null;
+    scoredAt: string;
+  } | null;
 }
 
 interface FeedbackListResponse {
@@ -91,6 +110,7 @@ interface ExplorerFilters {
   sentimentLabel: string;
   issueCategory: string;
   urgencyLevel: string;
+  churnRiskLevel: string;
   vehicleModel: string;
   dateFrom: string;
   dateTo: string;
@@ -101,8 +121,10 @@ interface ExecutiveDashboardSummary {
   positiveFeedback: number;
   negativeFeedback: number;
   criticalFeedback: number;
+  highRiskCustomers: number;
   openWarrantySignals: number;
   sentimentDistribution: Array<{ label: string; count: number }>;
+  churnRiskDistribution: Array<{ label: string; count: number }>;
   topIssueCategories: Array<{ category: string; count: number }>;
   dealerComparison: Array<{
     dealerId: string;
@@ -135,6 +157,7 @@ interface DealerDashboardSummary {
     sentimentBenchmark: number | null;
     feedbackCount: number;
     openEscalations: number;
+    highRiskCustomers: number;
   };
   complaintVolume: Array<{ period: string; count: number }>;
   sentimentTrend: Array<{ period: string; positive: number; neutral: number; negative: number; mixed: number }>;
@@ -486,7 +509,7 @@ function ExecutiveDashboardPage({ authFetch }: { authFetch: AuthFetch }) {
     { label: "Positive Sentiment", value: `${positiveRate}%`, suffix: "positive", accent: "green", trend: "+1.8%" },
     { label: "Negative Sentiment", value: `${negativeRate}%`, suffix: "negative", accent: "amber", trend: "watch" },
     { label: "Critical Feedback", value: String(dashboard?.criticalFeedback ?? 4), suffix: "critical", accent: "danger", trend: "action" },
-    { label: "Warranty Signals", value: String(dashboard?.openWarrantySignals ?? 0), suffix: "open", accent: "teal", trend: "quality" }
+    { label: "High Risk Customers", value: String(dashboard?.highRiskCustomers ?? 0), suffix: "customers", accent: "danger", trend: "retention" }
   ] as const;
   const sentimentRows = dashboard?.sentimentDistribution.length ? dashboard.sentimentDistribution : [
     { label: "Positive", count: 12 },
@@ -497,6 +520,11 @@ function ExecutiveDashboardPage({ authFetch }: { authFetch: AuthFetch }) {
     { category: "RepairQuality", count: 8 },
     { category: "PriceTransparency", count: 5 },
     { category: "WarrantyConcern", count: 3 }
+  ];
+  const churnRiskRows = dashboard?.churnRiskDistribution.length ? dashboard.churnRiskDistribution : [
+    { label: "High", count: 0 },
+    { label: "Medium", count: 0 },
+    { label: "Low", count: 0 }
   ];
   const dealerRows = dashboard?.dealerComparison.length ? dashboard.dealerComparison : dealers.map((dealer, index) => ({
     dealerId: dealer,
@@ -544,6 +572,10 @@ function ExecutiveDashboardPage({ authFetch }: { authFetch: AuthFetch }) {
             </DashboardPanel>
           </div>
 
+          <DashboardPanel title="Churn Risk Distribution" subtitle="Customers by latest generated churn risk">
+            <DistributionList rows={churnRiskRows.map((row) => ({ label: row.label, value: row.count }))} tone="issue" />
+          </DashboardPanel>
+
           <div className="grid gap-6 xl:grid-cols-2">
             <DashboardPanel title="Regional Sentiment Heatmap" subtitle="India · State-wise CX Sentiment">
               <div className="flex h-64 items-center justify-center rounded-xl bg-gradient-to-br from-emerald-50 via-white to-amber-50 text-sm text-slate-500">
@@ -570,7 +602,7 @@ function ExecutiveDashboardPage({ authFetch }: { authFetch: AuthFetch }) {
         </div>
 
         <DashboardInsightsSidebar
-          criticalText={`${dashboard?.criticalFeedback ?? 4} critical feedback · ${dashboard?.openWarrantySignals ?? 0} open warranty signals`}
+          criticalText={`${dashboard?.criticalFeedback ?? 4} critical feedback · ${dashboard?.highRiskCustomers ?? 0} high-risk customers · ${dashboard?.openWarrantySignals ?? 0} open warranty signals`}
         />
       </section>
   );
@@ -708,7 +740,7 @@ function DealerDashboardPage({ authFetch, user }: { authFetch: AuthFetch; user: 
         <MetricCard label="Open CRM Tasks" value={String(dashboard?.openCrmTasks.length ?? 0)} suffix="tasks" accent="danger" trend="recovery" />
         <MetricCard label="Open Escalations" value={String(dashboard?.scorecard.openEscalations ?? 0)} suffix="active" accent="amber" trend="ops" />
         <MetricCard label="CSI vs Benchmark" value={String(Math.round(dashboard?.scorecard.csiScore ?? 0))} suffix={`/ ${Math.round(dashboard?.scorecard.csiBenchmark ?? 0)}`} accent="green" trend="bench" />
-        <MetricCard label="NPS vs Benchmark" value={String(Math.round(dashboard?.scorecard.npsScore ?? 0))} suffix={`/ ${Math.round(dashboard?.scorecard.npsBenchmark ?? 0)}`} accent="teal" trend="bench" />
+        <MetricCard label="High Risk Customers" value={String(dashboard?.scorecard.highRiskCustomers ?? 0)} suffix="customers" accent="danger" trend="retention" />
       </div>
 
       <div className="grid gap-6 xl:grid-cols-3">
@@ -890,6 +922,7 @@ function FeedbackExplorer({ authFetch }: { authFetch: AuthFetch }) {
     sentimentLabel: "",
     issueCategory: "",
     urgencyLevel: "",
+    churnRiskLevel: "",
     vehicleModel: "",
     dateFrom: "",
     dateTo: ""
@@ -974,6 +1007,7 @@ function FeedbackExplorer({ authFetch }: { authFetch: AuthFetch }) {
       sentimentLabel: "",
       issueCategory: "",
       urgencyLevel: "",
+      churnRiskLevel: "",
       vehicleModel: "",
       dateFrom: "",
       dateTo: ""
@@ -1010,12 +1044,13 @@ function FeedbackExplorer({ authFetch }: { authFetch: AuthFetch }) {
         </button>
       </div>
 
-      <div className="mb-4 grid gap-3 md:grid-cols-2 xl:grid-cols-8">
+      <div className="mb-4 grid gap-3 md:grid-cols-2 xl:grid-cols-9">
         <FilterSelect label="Source" value={filters.sourceType} values={sourceTypes} onChange={(value) => updateFilter("sourceType", value)} />
         <FilterInput label="Dealer" value={filters.dealerName} placeholder="e.g. AutoTech" onChange={(value) => updateFilter("dealerName", value)} />
         <FilterSelect label="Sentiment" value={filters.sentimentLabel} values={sentimentLabels} onChange={(value) => updateFilter("sentimentLabel", value)} />
         <FilterSelect label="Issue" value={filters.issueCategory} values={issueCategories} onChange={(value) => updateFilter("issueCategory", value)} />
         <FilterSelect label="Urgency" value={filters.urgencyLevel} values={urgencyLevels} onChange={(value) => updateFilter("urgencyLevel", value)} />
+        <FilterSelect label="Churn Risk" value={filters.churnRiskLevel} values={churnRiskLevels} onChange={(value) => updateFilter("churnRiskLevel", value)} />
         <FilterInput label="Model" value={filters.vehicleModel} placeholder="e.g. Nexon" onChange={(value) => updateFilter("vehicleModel", value)} />
         <FilterInput label="From" value={filters.dateFrom} type="date" onChange={(value) => updateFilter("dateFrom", value)} />
         <FilterInput label="To" value={filters.dateTo} type="date" onChange={(value) => updateFilter("dateTo", value)} />
@@ -1030,17 +1065,19 @@ function FeedbackExplorer({ authFetch }: { authFetch: AuthFetch }) {
 
       <div className="grid gap-4 2xl:grid-cols-[1fr_420px]">
         <div className="overflow-hidden rounded-xl border border-slate-100">
-          <div className="grid grid-cols-[1.2fr_0.8fr_0.8fr_0.8fr_0.8fr] bg-slate-50 px-4 py-3 text-xs font-black uppercase tracking-wide text-slate-400">
+          <div className="grid grid-cols-[1.1fr_0.8fr_0.65fr_0.75fr_0.65fr_0.65fr_0.75fr] bg-slate-50 px-4 py-3 text-xs font-black uppercase tracking-wide text-slate-400">
             <span>Feedback</span>
             <span>Dealer / Model</span>
             <span>Sentiment</span>
             <span>Issue</span>
             <span>Urgency</span>
+            <span>Repeat</span>
+            <span>Churn</span>
           </div>
           {records.map((record) => (
             <button
               key={record.id}
-              className={`grid w-full grid-cols-[1.2fr_0.8fr_0.8fr_0.8fr_0.8fr] gap-3 border-t border-slate-100 px-4 py-4 text-left text-sm hover:bg-blue-50/60 ${
+              className={`grid w-full grid-cols-[1.1fr_0.8fr_0.65fr_0.75fr_0.65fr_0.65fr_0.75fr] gap-3 border-t border-slate-100 px-4 py-4 text-left text-sm hover:bg-blue-50/60 ${
                 selectedFeedbackId === record.id ? "bg-blue-50" : "bg-white"
               }`}
               type="button"
@@ -1057,6 +1094,8 @@ function FeedbackExplorer({ authFetch }: { authFetch: AuthFetch }) {
               <Badge tone={sentimentTone(record.sentimentLabel)}>{record.sentimentLabel ?? "Pending"}</Badge>
               <span className="font-semibold text-slate-700">{record.issueCategory ?? "Unclassified"}</span>
               <Badge tone={urgencyTone(record.urgencyLevel)}>{record.urgencyLevel ?? "Pending"}</Badge>
+              <Badge tone={record.isRepeatComplaint ? "red" : "slate"}>{record.isRepeatComplaint ? `${record.repeatComplaintCount} match` : "No"}</Badge>
+              <Badge tone={urgencyTone(record.churnRiskLevel)}>{record.churnRiskLevel ? `${record.churnRiskLevel} ${Math.round(record.churnRiskScore ?? 0)}` : "Pending"}</Badge>
             </button>
           ))}
           {records.length === 0 ? (
@@ -1152,6 +1191,9 @@ function FeedbackDetailPanel({ feedback, isLoading, totalCount }: { feedback: Fe
         <DetailMetric label="Language" value={feedback.nlpResult?.detectedLanguage ?? "Pending"} />
         <DetailMetric label="Issue" value={primaryIssue?.category ?? "Unclassified"} />
         <DetailMetric label="Confidence" value={formatPercent(primaryIssue?.confidenceScore ?? feedback.nlpResult?.confidenceScore)} />
+        <DetailMetric label="Repeat Complaint" value={feedback.repeatComplaintSignal?.isRepeat ? `${feedback.repeatComplaintSignal.repeatCount} match(es)` : "No"} />
+        <DetailMetric label="Lookback" value={feedback.repeatComplaintSignal ? `${feedback.repeatComplaintSignal.lookbackDays} days` : "Pending"} />
+        <DetailMetric label="Churn Risk" value={feedback.churnRisk ? `${feedback.churnRisk.riskLevel} (${Math.round(feedback.churnRisk.score)}/100)` : "Pending"} />
       </div>
 
       <div className="mt-4">
@@ -1164,6 +1206,12 @@ function FeedbackDetailPanel({ feedback, isLoading, totalCount }: { feedback: Fe
       </div>
 
       <DetailBlock title="Classification Explanation">{primaryIssue?.explanation ?? "Classification has not been generated yet."}</DetailBlock>
+      <DetailBlock title="Repeat Complaint Signal">
+        {feedback.repeatComplaintSignal?.reasonSummary ?? "Repeat complaint detection has not been run yet."}
+      </DetailBlock>
+      <DetailBlock title="Churn Risk Reason">
+        {feedback.churnRisk?.reasonSummary ?? "Churn risk scoring has not been run yet."}
+      </DetailBlock>
       <DetailBlock title="Related Actions">
         {feedback.reviewItems.length > 0
           ? feedback.reviewItems.map((item) => `${item.status}: ${item.reason}`).join(" | ")
