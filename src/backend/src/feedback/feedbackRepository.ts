@@ -32,6 +32,7 @@ export interface FeedbackFilters {
   sourceType?: string;
   processingStatus?: string;
   dealerId?: string;
+  dealerCode?: string;
   dealerName?: string;
   customerId?: string;
   vehicleId?: string;
@@ -88,6 +89,10 @@ export async function listFeedbackRecords(filters: FeedbackFilters) {
 
   if (filters.dealerId) {
     addCondition("fr.dealer_id = ?::uuid", filters.dealerId);
+  }
+
+  if (filters.dealerCode) {
+    addCondition("d.code = ?", filters.dealerCode);
   }
 
   if (filters.dealerName) {
@@ -177,7 +182,14 @@ export async function listFeedbackRecords(filters: FeedbackFilters) {
   };
 }
 
-export async function getFeedbackRecordById(id: string) {
+export async function getFeedbackRecordById(id: string, filters?: { dealerCode?: string }) {
+  const values: unknown[] = [id];
+  const dealerScopeSql = filters?.dealerCode ? "AND d.code = $2" : "";
+
+  if (filters?.dealerCode) {
+    values.push(filters.dealerCode);
+  }
+
   const result = await pool.query(
     `
       SELECT
@@ -256,9 +268,10 @@ export async function getFeedbackRecordById(id: string) {
       LEFT JOIN job_cards jc ON jc.id = fr.job_card_id
       LEFT JOIN warranty_claims wc ON wc.id = fr.warranty_claim_id
       LEFT JOIN nlp_results nr ON nr.feedback_record_id = fr.id
-      WHERE fr.id = $1::uuid;
+      WHERE fr.id = $1::uuid
+      ${dealerScopeSql};
     `,
-    [id]
+    values
   );
 
   return result.rows[0] ?? null;

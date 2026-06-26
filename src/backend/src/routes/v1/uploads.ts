@@ -1,5 +1,6 @@
 import { Router } from "express";
 import multer from "multer";
+import { requireRole } from "../../auth/middleware.js";
 import { env } from "../../config/env.js";
 import { uploadFeedbackFile } from "../../uploads/feedbackUploadService.js";
 
@@ -30,7 +31,7 @@ const upload = multer({
 
 export const uploadsRouter = Router();
 
-uploadsRouter.post("/uploads/feedback", upload.single("file"), async (req, res, next) => {
+uploadsRouter.post("/uploads/feedback", requireRole(["Admin", "OemUser"]), upload.single("file"), async (req, res, next) => {
   try {
     if (!req.file) {
       res.status(400).json({

@@ -58,6 +58,38 @@ frontend  -> http://localhost:5173
 GET /api/v1/health
 ```
 
+## Authentication And RBAC
+
+VOC-020 adds prototype JWT authentication and role-based access control backed by database users in `app_users`. All `/api/v1` endpoints require a bearer token except:
+
+```text
+POST /api/v1/auth/login
+POST /api/v1/auth/refresh
+```
+
+Seeded prototype users:
+
+```text
+admin / Feqma$ecure
+oem / Password123
+reviewer / Password123
+dealer_<dealer_code_with_underscores> / Password123
+```
+
+Example dealer user:
+
+```text
+dealer_at_blr_001 / Password123
+```
+
+Roles:
+
+```text
+Admin, OemUser, DealerUser, Reviewer
+```
+
+Dealer users are seeded one per dealer and scoped to their assigned dealer from the JWT token. Reviewer is a central/OEM review role in this prototype, so only one reviewer is seeded. The frontend shows a login screen, stores the access/refresh tokens locally for the prototype, attaches the JWT to API calls, and refreshes tokens on unauthorized responses.
+
 ## Prototype Seed Data
 
 VOC-003 seed data is available as a resettable SQL script:
@@ -223,6 +255,16 @@ GET /api/v1/dashboard/executive
 ```
 
 The dashboard shows sentiment distribution, top issue categories, dealer comparison, critical feedback count, and open warranty signal count.
+
+## Dealer Dashboard
+
+VOC-013 adds a dealer-scoped dashboard endpoint and a separate Dealer Dashboard menu page. The endpoint accepts `dealerCode` or `dealerId` so the prototype can model assigned-dealer visibility.
+
+```text
+GET /api/v1/dashboard/dealer?dealerCode=AT-BLR-001
+```
+
+The dashboard shows complaint volume, sentiment trend, top issues, open CRM recovery tasks, and dealer scorecard values compared with network benchmarks.
 
 ## Feedback Explorer UI
 

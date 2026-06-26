@@ -25,7 +25,11 @@ const envSchema = z.object({
   SWAGGER_VERSION: z.string().default("1.0.0"),
   RUN_MIGRATIONS_ON_START: z.coerce.boolean().default(true),
   MIGRATIONS_DIR: z.string().default("src/backend/data/migrations"),
-  UPLOAD_MAX_FILE_SIZE_BYTES: z.coerce.number().int().positive().default(5_242_880)
+  UPLOAD_MAX_FILE_SIZE_BYTES: z.coerce.number().int().positive().default(5_242_880),
+  JWT_ACCESS_SECRET: z.string().min(16),
+  JWT_REFRESH_SECRET: z.string().min(16),
+  JWT_ACCESS_TOKEN_TTL_SECONDS: z.coerce.number().int().positive().default(900),
+  JWT_REFRESH_TOKEN_TTL_SECONDS: z.coerce.number().int().positive().default(86_400)
 });
 
 export const env = envSchema.parse(process.env);
