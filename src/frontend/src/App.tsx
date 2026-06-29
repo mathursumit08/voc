@@ -81,6 +81,17 @@ interface FeedbackDetail extends FeedbackSummary {
     reason: string;
     assignedTo: string | null;
   }>;
+  crmTasks: Array<{
+    id: string;
+    title: string;
+    description: string | null;
+    priority: string;
+    status: string;
+    dueAt: string | null;
+    closedAt: string | null;
+    resolutionNotes: string | null;
+    createdAt: string;
+  }>;
   repeatComplaintSignal: {
     isRepeat: boolean;
     repeatCount: number;
@@ -95,6 +106,14 @@ interface FeedbackDetail extends FeedbackSummary {
     reasonSummary: string | null;
     scoredAt: string;
   } | null;
+}
+
+interface ResponseDraft {
+  feedbackRecordId: string;
+  tone: string;
+  issueCategory: string;
+  sentimentLabel: string;
+  draftText: string;
 }
 
 interface FeedbackListResponse {
@@ -990,6 +1009,59 @@ function FeedbackExplorer({ authFetch }: { authFetch: AuthFetch }) {
     }
   }
 
+  async function createRecoveryTask(feedbackId: string) {
+    try {
+      const response = await authFetch(`${apiBaseUrl}/feedback/${feedbackId}/crm-tasks`, { method: "POST" });
+      const payload = await response.json();
+
+      if (!response.ok) {
+        throw new Error(payload.message ?? "Could not create CRM recovery task.");
+      }
+
+      setMessage("CRM recovery task is ready for follow-up.");
+      await openFeedbackDetail(feedbackId);
+      await loadFeedback();
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "Could not create CRM recovery task.");
+    }
+  }
+
+  async function closeRecoveryTask(taskId: string, resolutionNotes: string) {
+    try {
+      const response = await authFetch(`${apiBaseUrl}/crm-tasks/${taskId}/close`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ resolutionNotes })
+      });
+      const payload = await response.json();
+
+      if (!response.ok) {
+        throw new Error(payload.message ?? "Could not close CRM recovery task.");
+      }
+
+      setMessage("CRM recovery task closed with resolution notes.");
+
+      if (selectedFeedbackId) {
+        await openFeedbackDetail(selectedFeedbackId);
+      }
+
+      await loadFeedback();
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "Could not close CRM recovery task.");
+    }
+  }
+
+  async function generateResponseDraft(feedbackId: string) {
+    const response = await authFetch(`${apiBaseUrl}/feedback/${feedbackId}/response-draft`, { method: "POST" });
+    const payload = (await response.json()) as ResponseDraft | { message?: string };
+
+    if (!response.ok) {
+      throw new Error("message" in payload ? payload.message ?? "Could not generate response draft." : "Could not generate response draft.");
+    }
+
+    return payload as ResponseDraft;
+  }
+
   function updateFilter(key: keyof ExplorerFilters, value: string) {
     setPage(1);
     setSelectedFeedbackId(null);
@@ -1105,7 +1177,14 @@ function FeedbackExplorer({ authFetch }: { authFetch: AuthFetch }) {
           ) : null}
         </div>
 
-        <FeedbackDetailPanel feedback={selectedFeedback} isLoading={isDetailLoading} totalCount={totalCount} />
+        <FeedbackDetailPanel
+          feedback={selectedFeedback}
+          isLoading={isDetailLoading}
+          totalCount={totalCount}
+          onCreateRecoveryTask={createRecoveryTask}
+          onCloseRecoveryTask={closeRecoveryTask}
+          onGenerateResponseDraft={generateResponseDraft}
+        />
       </div>
 
       <div className="mt-4 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-slate-100 px-4 py-3 text-sm">
@@ -1155,7 +1234,34 @@ function FeedbackExplorer({ authFetch }: { authFetch: AuthFetch }) {
   );
 }
 
-function FeedbackDetailPanel({ feedback, isLoading, totalCount }: { feedback: FeedbackDetail | null; isLoading: boolean; totalCount: number }) {
+function FeedbackDetailPanel({
+  feedback,
+  isLoading,
+  totalCount,
+  onCreateRecoveryTask,
+  onCloseRecoveryTask,
+  onGenerateResponseDraft
+}: {
+  feedback: FeedbackDetail | null;
+  isLoading: boolean;
+  totalCount: number;
+  onCreateRecoveryTask: (feedbackId: string) => Promise<void>;
+  onCloseRecoveryTask: (taskId: string, resolutionNotes: string) => Promise<void>;
+  onGenerateResponseDraft: (feedbackId: string) => Promise<ResponseDraft>;
+}) {
+  const [resolutionNotesByTaskId, setResolutionNotesByTaskId] = useState<Record<string, string>>({});
+  const [isTaskActionRunning, setIsTaskActionRunning] = useState(false);
+  const [responseDraft, setResponseDraft] = useState<ResponseDraft | null>(null);
+  const [editableDraftText, setEditableDraftText] = useState("");
+  const [draftMessage, setDraftMessage] = useState("Generate a draft response for dealer review.");
+  const [isDraftGenerating, setIsDraftGenerating] = useState(false);
+
+  useEffect(() => {
+    setResponseDraft(null);
+    setEditableDraftText("");
+    setDraftMessage("Generate a draft response for dealer review.");
+  }, [feedback?.id]);
+
   if (isLoading) {
     return <aside className="rounded-xl border border-slate-100 bg-slate-50 p-5 text-sm font-semibold text-slate-500">Loading feedback detail...</aside>;
   }
@@ -1170,6 +1276,40 @@ function FeedbackDetailPanel({ feedback, isLoading, totalCount }: { feedback: Fe
   }
 
   const primaryIssue = feedback.issueClassifications.find((item) => item.isPrimary) ?? feedback.issueClassifications[0];
+  const hasOpenRecoveryTask = feedback.crmTasks.some((task) => task.status === "Open" || task.status === "InProgress");
+
+  async function runTaskAction(action: () => Promise<void>) {
+    setIsTaskActionRunning(true);
+
+    try {
+      await action();
+    } finally {
+      setIsTaskActionRunning(false);
+    }
+  }
+
+  async function runDraftGeneration() {
+    if (!feedback) {
+      return;
+    }
+
+    const feedbackId = feedback.id;
+    setIsDraftGenerating(true);
+    setDraftMessage("Generating response draft...");
+
+    try {
+      const draft = await onGenerateResponseDraft(feedbackId);
+      setResponseDraft(draft);
+      setEditableDraftText(draft.draftText);
+      setDraftMessage(`Draft generated with ${draft.tone.toLowerCase()} tone for ${draft.issueCategory}.`);
+    } catch (error) {
+      setResponseDraft(null);
+      setEditableDraftText("");
+      setDraftMessage(error instanceof Error ? error.message : "Could not generate response draft.");
+    } finally {
+      setIsDraftGenerating(false);
+    }
+  }
 
   return (
     <aside className="rounded-xl border border-slate-100 bg-slate-50 p-5">
@@ -1212,6 +1352,111 @@ function FeedbackDetailPanel({ feedback, isLoading, totalCount }: { feedback: Fe
       <DetailBlock title="Churn Risk Reason">
         {feedback.churnRisk?.reasonSummary ?? "Churn risk scoring has not been run yet."}
       </DetailBlock>
+      <div className="mt-4 rounded-xl bg-white p-4">
+        <div className="mb-3 flex items-center justify-between gap-3">
+          <div>
+            <p className="text-xs font-black uppercase tracking-wide text-slate-400">Dealer Response Draft</p>
+            <p className="mt-1 text-sm text-slate-500">{draftMessage}</p>
+          </div>
+          <button
+            className="rounded-xl bg-blue-600 px-3 py-2 text-xs font-black text-white disabled:cursor-not-allowed disabled:bg-slate-300"
+            type="button"
+            disabled={isDraftGenerating}
+            onClick={() => void runDraftGeneration()}
+          >
+            {responseDraft ? "Regenerate" : "Generate Draft"}
+          </button>
+        </div>
+        {responseDraft ? (
+          <div className="space-y-3">
+            <div className="flex flex-wrap gap-2">
+              <Badge tone="blue">Tone: {responseDraft.tone}</Badge>
+              <Badge tone={sentimentTone(responseDraft.sentimentLabel)}>Sentiment: {responseDraft.sentimentLabel}</Badge>
+              <Badge tone="slate">Issue: {responseDraft.issueCategory}</Badge>
+            </div>
+            <textarea
+              className="min-h-56 w-full rounded-xl border border-slate-200 px-3 py-2 text-sm leading-6 outline-none focus:border-blue-400"
+              value={editableDraftText}
+              onChange={(event) => setEditableDraftText(event.target.value)}
+            />
+            <div className="flex justify-end">
+              <button
+                className="rounded-xl border border-slate-200 px-3 py-2 text-xs font-black text-slate-700"
+                type="button"
+                onClick={() => {
+                  setResponseDraft(null);
+                  setEditableDraftText("");
+                  setDraftMessage("Draft discarded. Generate another draft when needed.");
+                }}
+              >
+                Discard Draft
+              </button>
+            </div>
+          </div>
+        ) : (
+          <p className="rounded-xl bg-slate-50 p-3 text-sm font-semibold text-slate-500">
+            The draft is generated for review only. Edit it here before using it outside the prototype.
+          </p>
+        )}
+      </div>
+      <div className="mt-4 rounded-xl bg-white p-4">
+        <div className="mb-3 flex items-center justify-between gap-3">
+          <div>
+            <p className="text-xs font-black uppercase tracking-wide text-slate-400">CRM Recovery Tasks</p>
+            <p className="mt-1 text-sm text-slate-500">Mock service recovery follow-up for this feedback.</p>
+          </div>
+          <button
+            className="rounded-xl bg-blue-600 px-3 py-2 text-xs font-black text-white disabled:cursor-not-allowed disabled:bg-slate-300"
+            type="button"
+            disabled={isTaskActionRunning || hasOpenRecoveryTask}
+            onClick={() => void runTaskAction(() => onCreateRecoveryTask(feedback.id))}
+          >
+            {hasOpenRecoveryTask ? "Task Open" : "Create Task"}
+          </button>
+        </div>
+        <div className="space-y-3">
+          {feedback.crmTasks.length ? (
+            feedback.crmTasks.map((task) => (
+              <div key={task.id} className="rounded-xl border border-slate-100 bg-slate-50 p-3">
+                <div className="flex items-center justify-between gap-3">
+                  <div>
+                    <p className="font-bold text-slate-900">{task.title}</p>
+                    <p className="mt-1 text-xs font-semibold text-slate-500">
+                      {task.status} · Due {task.dueAt ? new Date(task.dueAt).toLocaleDateString() : "not set"}
+                    </p>
+                  </div>
+                  <Badge tone={urgencyTone(task.priority)}>{task.priority}</Badge>
+                </div>
+                {task.description ? <p className="mt-2 text-sm text-slate-600">{task.description}</p> : null}
+                {task.status === "Closed" ? (
+                  <p className="mt-2 rounded-lg bg-emerald-50 px-3 py-2 text-xs font-semibold text-emerald-700">
+                    Resolution: {task.resolutionNotes ?? "Closed without notes."}
+                  </p>
+                ) : (
+                  <div className="mt-3 space-y-2">
+                    <textarea
+                      className="min-h-20 w-full rounded-xl border border-slate-200 px-3 py-2 text-sm outline-none focus:border-blue-400"
+                      placeholder="Add resolution notes before closing..."
+                      value={resolutionNotesByTaskId[task.id] ?? ""}
+                      onChange={(event) => setResolutionNotesByTaskId((current) => ({ ...current, [task.id]: event.target.value }))}
+                    />
+                    <button
+                      className="rounded-xl border border-slate-200 px-3 py-2 text-xs font-black text-slate-700 disabled:cursor-not-allowed disabled:opacity-40"
+                      type="button"
+                      disabled={isTaskActionRunning || !(resolutionNotesByTaskId[task.id] ?? "").trim()}
+                      onClick={() => void runTaskAction(() => onCloseRecoveryTask(task.id, resolutionNotesByTaskId[task.id] ?? ""))}
+                    >
+                      Close Task
+                    </button>
+                  </div>
+                )}
+              </div>
+            ))
+          ) : (
+            <p className="rounded-xl bg-slate-50 p-3 text-sm font-semibold text-slate-500">No CRM recovery task has been created for this feedback.</p>
+          )}
+        </div>
+      </div>
       <DetailBlock title="Related Actions">
         {feedback.reviewItems.length > 0
           ? feedback.reviewItems.map((item) => `${item.status}: ${item.reason}`).join(" | ")

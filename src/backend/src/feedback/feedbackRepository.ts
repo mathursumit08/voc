@@ -278,6 +278,27 @@ export async function getFeedbackRecordById(id: string, filters?: { dealerCode?:
           ),
           '[]'::jsonb
         ) AS "reviewItems",
+        COALESCE(
+          (
+            SELECT jsonb_agg(
+              jsonb_build_object(
+                'id', task.id,
+                'title', task.title,
+                'description', task.description,
+                'priority', task.priority,
+                'status', task.status,
+                'dueAt', task.due_at,
+                'closedAt', task.closed_at,
+                'resolutionNotes', task.resolution_notes,
+                'createdAt', task.created_at
+              )
+              ORDER BY task.created_at DESC
+            )
+            FROM crm_tasks task
+            WHERE task.feedback_record_id = fr.id
+          ),
+          '[]'::jsonb
+        ) AS "crmTasks",
         CASE
           WHEN rcs.id IS NULL THEN NULL
           ELSE jsonb_build_object(

@@ -300,9 +300,28 @@ GET /api/v1/dashboard/dealer?dealerCode=AT-BLR-001
 
 The dashboard shows complaint volume, sentiment trend, top issues, open CRM recovery tasks, and dealer scorecard values compared with network benchmarks.
 
+## CRM Recovery Tasks
+
+VOC-016 creates mock CRM recovery tasks from feedback detail and lets Admin, OEM, and scoped Dealer users close tasks with resolution notes.
+
+```text
+POST /api/v1/feedback/:id/crm-tasks
+PATCH /api/v1/crm-tasks/:id/close
+```
+
+Feedback detail includes `crmTasks`, and the Dealer Dashboard shows open tasks for the selected or assigned dealer.
+
+## Dealer Response Drafts
+
+VOC-017 generates editable dealer response drafts from feedback detail. Drafts reference the feedback sentiment and issue category, and they remain local to the UI so the user can edit or discard them before use.
+
+```text
+POST /api/v1/feedback/:id/response-draft
+```
+
 ## Feedback Explorer UI
 
-VOC-011 adds a frontend feedback workspace available from the top menu. The workspace contains feedback upload and feedback explorer on a separate page from the command center. It loads `GET /api/v1/feedback`, supports source, dealer, model, date range, sentiment, issue, urgency filters, and paginated list navigation using `limit` and `offset`. It opens `GET /api/v1/feedback/:id` details with raw text, masked text, translated text, sentiment, topics, issue classification, and related review items.
+VOC-011 adds a frontend feedback workspace available from the top menu. The workspace contains feedback upload and feedback explorer on a separate page from the command center. It loads `GET /api/v1/feedback`, supports source, dealer, model, date range, sentiment, issue, urgency, and churn risk filters, and paginated list navigation using `limit` and `offset`. It opens `GET /api/v1/feedback/:id` details with raw text, masked text, translated text, sentiment, topics, issue classification, response drafts, recovery tasks, and related review items.
 
 ## Important Development Rule
 

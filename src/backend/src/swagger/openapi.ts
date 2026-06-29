@@ -867,6 +867,176 @@ export const openApiDocument = {
         }
       }
     },
+    "/feedback/{id}/crm-tasks": {
+      post: {
+        tags: ["Feedback"],
+        summary: "Create a mock CRM recovery task from feedback",
+        description:
+          "Creates or returns an active CRM recovery task for a feedback record. Dealer users are scoped to their assigned dealer.",
+        operationId: "createFeedbackCrmTask",
+        parameters: [
+          {
+            name: "id",
+            in: "path",
+            required: true,
+            schema: {
+              type: "string",
+              format: "uuid"
+            }
+          }
+        ],
+        requestBody: {
+          required: false,
+          content: {
+            "application/json": {
+              schema: {
+                type: "object",
+                properties: {
+                  dueAt: {
+                    type: "string",
+                    format: "date-time",
+                    description: "Optional due date override. Defaults from task priority."
+                  }
+                }
+              }
+            }
+          }
+        },
+        responses: {
+          "201": {
+            description: "CRM recovery task created or existing active task returned",
+            content: {
+              "application/json": {
+                schema: {
+                  $ref: "#/components/schemas/CrmTask"
+                }
+              }
+            }
+          },
+          "404": {
+            description: "Feedback record not found or not accessible",
+            content: {
+              "application/json": {
+                schema: {
+                  $ref: "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/crm-tasks/{id}/close": {
+      patch: {
+        tags: ["Feedback"],
+        summary: "Close a mock CRM recovery task",
+        description:
+          "Closes a CRM task with required resolution notes. Dealer users can close only tasks for their assigned dealer.",
+        operationId: "closeCrmTask",
+        parameters: [
+          {
+            name: "id",
+            in: "path",
+            required: true,
+            schema: {
+              type: "string",
+              format: "uuid"
+            }
+          }
+        ],
+        requestBody: {
+          required: true,
+          content: {
+            "application/json": {
+              schema: {
+                type: "object",
+                required: ["resolutionNotes"],
+                properties: {
+                  resolutionNotes: {
+                    type: "string",
+                    minLength: 1
+                  }
+                }
+              }
+            }
+          }
+        },
+        responses: {
+          "200": {
+            description: "CRM task closed",
+            content: {
+              "application/json": {
+                schema: {
+                  $ref: "#/components/schemas/CrmTask"
+                }
+              }
+            }
+          },
+          "400": {
+            description: "Missing resolution notes",
+            content: {
+              "application/json": {
+                schema: {
+                  $ref: "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            description: "CRM task not found or not accessible",
+            content: {
+              "application/json": {
+                schema: {
+                  $ref: "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/feedback/{id}/response-draft": {
+      post: {
+        tags: ["Feedback"],
+        summary: "Generate a dealer response draft",
+        description:
+          "Generates an editable prototype response draft using feedback sentiment, issue category, urgency, customer label, and dealer context. Dealer users are scoped to their assigned dealer.",
+        operationId: "generateFeedbackResponseDraft",
+        parameters: [
+          {
+            name: "id",
+            in: "path",
+            required: true,
+            schema: {
+              type: "string",
+              format: "uuid"
+            }
+          }
+        ],
+        responses: {
+          "200": {
+            description: "Response draft generated",
+            content: {
+              "application/json": {
+                schema: {
+                  $ref: "#/components/schemas/ResponseDraft"
+                }
+              }
+            }
+          },
+          "404": {
+            description: "Feedback record not found or not accessible",
+            content: {
+              "application/json": {
+                schema: {
+                  $ref: "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/feedback/urgency/run": {
       post: {
         tags: ["Feedback"],
@@ -1928,6 +2098,105 @@ export const openApiDocument = {
           }
         }
       },
+      CrmTask: {
+        type: "object",
+        required: ["id", "feedbackRecordId", "title", "priority", "status", "createdAt", "updatedAt"],
+        properties: {
+          id: {
+            type: "string",
+            format: "uuid"
+          },
+          feedbackRecordId: {
+            type: "string",
+            format: "uuid"
+          },
+          customerId: {
+            type: "string",
+            format: "uuid",
+            nullable: true
+          },
+          dealerId: {
+            type: "string",
+            format: "uuid",
+            nullable: true
+          },
+          title: {
+            type: "string"
+          },
+          description: {
+            type: "string",
+            nullable: true
+          },
+          priority: {
+            type: "string",
+            enum: ["Low", "Medium", "High", "Critical"]
+          },
+          status: {
+            type: "string",
+            enum: ["Open", "InProgress", "Closed", "Cancelled"]
+          },
+          dueAt: {
+            type: "string",
+            format: "date-time",
+            nullable: true
+          },
+          closedAt: {
+            type: "string",
+            format: "date-time",
+            nullable: true
+          },
+          resolutionNotes: {
+            type: "string",
+            nullable: true
+          },
+          createdAt: {
+            type: "string",
+            format: "date-time"
+          },
+          updatedAt: {
+            type: "string",
+            format: "date-time"
+          }
+        }
+      },
+      ResponseDraft: {
+        type: "object",
+        required: ["feedbackRecordId", "tone", "issueCategory", "sentimentLabel", "draftText"],
+        properties: {
+          feedbackRecordId: {
+            type: "string",
+            format: "uuid"
+          },
+          tone: {
+            type: "string",
+            example: "Apologetic"
+          },
+          issueCategory: {
+            type: "string",
+            enum: [
+              "ServiceQuality",
+              "RepairQuality",
+              "StaffBehavior",
+              "PriceTransparency",
+              "PartsAvailability",
+              "WarrantyConcern",
+              "VehicleQuality",
+              "DeliveryDelay",
+              "FacilityExperience",
+              "DigitalExperience",
+              "Other"
+            ]
+          },
+          sentimentLabel: {
+            type: "string",
+            enum: ["Positive", "Neutral", "Negative", "Mixed", "Unknown"]
+          },
+          draftText: {
+            type: "string",
+            description: "Editable response draft for dealer review before use."
+          }
+        }
+      },
       UrgencyProcessingResult: {
         type: "object",
         required: ["feedbackRecordId", "urgencyScore", "urgencyLevel", "isCritical", "repeatComplaintCount", "factors"],
@@ -2082,6 +2351,12 @@ export const openApiDocument = {
                 type: "array",
                 items: {
                   $ref: "#/components/schemas/ReviewQueueItem"
+                }
+              },
+              crmTasks: {
+                type: "array",
+                items: {
+                  $ref: "#/components/schemas/CrmTask"
                 }
               },
               repeatComplaintSignal: {
