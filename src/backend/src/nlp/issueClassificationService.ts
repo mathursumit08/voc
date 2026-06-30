@@ -1,5 +1,6 @@
 import { pool } from "../db/pool.js";
 import { processFeedbackSentimentTopics } from "./sentimentTopicService.js";
+import { createReviewQueueItem } from "../review/reviewQueueService.js";
 
 type IssueCategory =
   | "ServiceQuality"
@@ -206,30 +207,7 @@ async function storePrimaryClassification(feedbackRecordId: string, classificati
     let reviewQueueItemId: string | null = null;
 
     if (storedClassification.confidenceScore < lowConfidenceThreshold) {
-      const reviewResult = await client.query<{ id: string }>(
-        `
-          INSERT INTO human_review_queue (
-            feedback_record_id,
-            status,
-            reason
-          )
-          SELECT
-            $1::uuid,
-            'Open'::"ReviewQueueStatus",
-            $2
-          WHERE NOT EXISTS (
-            SELECT 1
-            FROM human_review_queue
-            WHERE feedback_record_id = $1::uuid
-              AND status IN ('Open'::"ReviewQueueStatus", 'InReview'::"ReviewQueueStatus")
-              AND reason = $2
-          )
-          RETURNING id
-        `,
-        [feedbackRecordId, "Low-confidence issue classification requires review."]
-      );
-
-      reviewQueueItemId = reviewResult.rows[0]?.id ?? null;
+      reviewQueueItemId = await createReviewQueueItem(feedbackRecordId, "Low-confidence issue classification requires review.", client);
     }
 
     await client.query("COMMIT");

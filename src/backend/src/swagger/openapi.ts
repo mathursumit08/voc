@@ -309,6 +309,140 @@ export const openApiDocument = {
         }
       }
     },
+    "/review-queue": {
+      get: {
+        tags: ["Review Queue"],
+        summary: "List human review queue items",
+        description: "Returns paginated review items for low-confidence classifications and critical feedback.",
+        operationId: "listReviewQueueItems",
+        parameters: [
+          {
+            name: "status",
+            in: "query",
+            schema: {
+              type: "string",
+              enum: ["Open", "InReview", "Resolved", "Dismissed"]
+            }
+          },
+          {
+            name: "limit",
+            in: "query",
+            schema: {
+              type: "integer",
+              minimum: 1,
+              maximum: 100,
+              default: 25
+            }
+          },
+          {
+            name: "offset",
+            in: "query",
+            schema: {
+              type: "integer",
+              minimum: 0,
+              default: 0
+            }
+          }
+        ],
+        responses: {
+          "200": {
+            description: "Review queue items returned",
+            content: {
+              "application/json": {
+                schema: {
+                  $ref: "#/components/schemas/ReviewQueueListResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/review-queue/{id}/resolve": {
+      patch: {
+        tags: ["Review Queue"],
+        summary: "Resolve a human review item",
+        description:
+          "Applies reviewer corrections to sentiment, topics, issue category, and urgency, then stores reviewer notes and marks the item resolved.",
+        operationId: "resolveReviewQueueItem",
+        parameters: [
+          {
+            name: "id",
+            in: "path",
+            required: true,
+            schema: {
+              type: "string",
+              format: "uuid"
+            }
+          }
+        ],
+        requestBody: {
+          required: true,
+          content: {
+            "application/json": {
+              schema: {
+                type: "object",
+                required: ["sentimentLabel", "topics", "issueCategory", "urgencyLevel", "reviewerNotes"],
+                properties: {
+                  sentimentLabel: { type: "string", enum: ["Positive", "Neutral", "Negative", "Mixed", "Unknown"] },
+                  topics: { type: "array", items: { type: "string" } },
+                  issueCategory: {
+                    type: "string",
+                    enum: [
+                      "ServiceQuality",
+                      "RepairQuality",
+                      "StaffBehavior",
+                      "PriceTransparency",
+                      "PartsAvailability",
+                      "WarrantyConcern",
+                      "VehicleQuality",
+                      "DeliveryDelay",
+                      "FacilityExperience",
+                      "DigitalExperience",
+                      "Other"
+                    ]
+                  },
+                  urgencyLevel: { type: "string", enum: ["Low", "Medium", "High", "Critical"] },
+                  reviewerNotes: { type: "string", minLength: 1 }
+                }
+              }
+            }
+          }
+        },
+        responses: {
+          "200": {
+            description: "Review item resolved",
+            content: {
+              "application/json": {
+                schema: {
+                  $ref: "#/components/schemas/ReviewQueueRecord"
+                }
+              }
+            }
+          },
+          "400": {
+            description: "Invalid review correction",
+            content: {
+              "application/json": {
+                schema: {
+                  $ref: "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            description: "Open review item not found",
+            content: {
+              "application/json": {
+                schema: {
+                  $ref: "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/uploads/feedback": {
       post: {
         tags: ["Uploads"],
@@ -2002,6 +2136,59 @@ export const openApiDocument = {
           createdAt: {
             type: "string",
             format: "date-time"
+          }
+        }
+      },
+      ReviewQueueRecord: {
+        type: "object",
+        required: ["id", "feedbackRecordId", "status", "reason", "createdAt", "sourceReferenceId", "feedbackDate", "rawText"],
+        properties: {
+          id: { type: "string", format: "uuid" },
+          feedbackRecordId: { type: "string", format: "uuid" },
+          status: { type: "string", enum: ["Open", "InReview", "Resolved", "Dismissed"] },
+          reason: { type: "string" },
+          assignedTo: { type: "string", nullable: true },
+          reviewerNotes: { type: "string", nullable: true },
+          resolvedAt: { type: "string", format: "date-time", nullable: true },
+          createdAt: { type: "string", format: "date-time" },
+          sourceReferenceId: { type: "string" },
+          feedbackDate: { type: "string", format: "date-time" },
+          maskedText: { type: "string", nullable: true },
+          rawText: { type: "string" },
+          dealerName: { type: "string", nullable: true },
+          dealerCode: { type: "string", nullable: true },
+          sentimentLabel: { type: "string", nullable: true, enum: ["Positive", "Neutral", "Negative", "Mixed", "Unknown"] },
+          topics: { type: "array", nullable: true, items: { type: "string" } },
+          issueCategory: {
+            type: "string",
+            nullable: true,
+            enum: [
+              "ServiceQuality",
+              "RepairQuality",
+              "StaffBehavior",
+              "PriceTransparency",
+              "PartsAvailability",
+              "WarrantyConcern",
+              "VehicleQuality",
+              "DeliveryDelay",
+              "FacilityExperience",
+              "DigitalExperience",
+              "Other"
+            ]
+          },
+          urgencyLevel: { type: "string", nullable: true, enum: ["Low", "Medium", "High", "Critical"] }
+        }
+      },
+      ReviewQueueListResponse: {
+        type: "object",
+        required: ["totalCount", "limit", "offset", "records"],
+        properties: {
+          totalCount: { type: "integer", example: 12 },
+          limit: { type: "integer", example: 25 },
+          offset: { type: "integer", example: 0 },
+          records: {
+            type: "array",
+            items: { $ref: "#/components/schemas/ReviewQueueRecord" }
           }
         }
       },

@@ -1,4 +1,5 @@
 import { pool } from "../db/pool.js";
+import { createReviewQueueItem } from "../review/reviewQueueService.js";
 import { processFeedbackIssueClassification } from "./issueClassificationService.js";
 import { detectRepeatComplaint } from "./repeatComplaintService.js";
 
@@ -161,6 +162,10 @@ export async function processFeedbackUrgency(feedbackRecordId: string) {
   const urgencyLevel = scoreToUrgencyLevel(urgencyScore);
 
   await storeUrgencyResult(context.id, urgencyScore, urgencyLevel, factors, context.explanation);
+
+  if (urgencyLevel === "Critical") {
+    await createReviewQueueItem(context.id, "Critical feedback requires human review.");
+  }
 
   return {
     feedbackRecordId: context.id,
