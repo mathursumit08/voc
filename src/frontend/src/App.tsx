@@ -123,6 +123,34 @@ interface FeedbackListResponse {
   records: FeedbackSummary[];
 }
 
+interface ReviewQueueItem {
+  id: string;
+  feedbackRecordId: string;
+  status: string;
+  reason: string;
+  assignedTo: string | null;
+  reviewerNotes: string | null;
+  resolvedAt: string | null;
+  createdAt: string;
+  sourceReferenceId: string;
+  feedbackDate: string;
+  maskedText: string | null;
+  rawText: string;
+  dealerName: string | null;
+  dealerCode: string | null;
+  sentimentLabel: string | null;
+  topics: string[] | null;
+  issueCategory: string | null;
+  urgencyLevel: string | null;
+}
+
+interface ReviewQueueListResponse {
+  totalCount: number;
+  limit: number;
+  offset: number;
+  records: ReviewQueueItem[];
+}
+
 interface ExplorerFilters {
   sourceType: string;
   dealerName: string;
@@ -967,6 +995,7 @@ function DistributionList({ rows, tone }: { rows: Array<{ label: string; value: 
 
 function FeedbackWorkspacePage({ authFetch, user }: { authFetch: AuthFetch; user: AuthUser }) {
   const canUploadFeedback = user.role === "Admin" || user.role === "OemUser";
+  const canReviewQueue = user.role === "Admin" || user.role === "OemUser" || user.role === "Reviewer";
   const pageTitle = canUploadFeedback ? "Upload And Explore Feedback" : user.role === "Reviewer" ? "Review And Explore Feedback" : "View Dealer Feedback";
   const pageDescription = canUploadFeedback
     ? "Load prototype feedback files, then inspect normalized records and NLP outputs from one workspace."
@@ -992,6 +1021,8 @@ function FeedbackWorkspacePage({ authFetch, user }: { authFetch: AuthFetch; user
         </div>
       </div>
 
+      {canReviewQueue ? <ReviewQueuePanel authFetch={authFetch} /> : null}
+
       <div className={`grid gap-6 ${canUploadFeedback ? "xl:grid-cols-[360px_1fr]" : ""}`}>
         {canUploadFeedback ? <FeedbackUploadCard authFetch={authFetch} /> : null}
         <FeedbackExplorer authFetch={authFetch} />
@@ -1006,6 +1037,213 @@ interface UploadResult {
   rejectedRows: number;
   duplicateRows: number;
   insertedRows: number;
+}
+
+function ReviewQueuePanel({ authFetch }: { authFetch: AuthFetch }) {
+  const [records, setRecords] = useState<ReviewQueueItem[]>([]);
+  const [status, setStatus] = useState("Open");
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(10);
+  const [totalCount, setTotalCount] = useState(0);
+  const [isLoading, setIsLoading] = useState(false);
+  const [message, setMessage] = useState("Loading review queue...");
+  const [edits, setEdits] = useState<Record<string, { sentimentLabel: string; topics: string; issueCategory: string; urgencyLevel: string; reviewerNotes: string }>>({});
+
+  async function loadReviewQueue() {
+    const offset = (page - 1) * pageSize;
+    const params = new URLSearchParams({ limit: String(pageSize), offset: String(offset) });
+
+    if (status) {
+      params.set("status", status);
+    }
+
+    setIsLoading(true);
+
+    try {
+      const response = await authFetch(`${apiBaseUrl}/review-queue?${params.toString()}`);
+      const payload = (await response.json()) as ReviewQueueListResponse;
+
+      if (!response.ok) {
+        throw new Error("Could not load review queue.");
+      }
+
+      setRecords(payload.records);
+      setTotalCount(payload.totalCount);
+      setMessage(payload.records.length ? `${payload.totalCount} review item(s) found.` : "No review items for this status.");
+    } catch (error) {
+      setRecords([]);
+      setTotalCount(0);
+      setMessage(error instanceof Error ? error.message : "Could not load review queue.");
+    } finally {
+      setIsLoading(false);
+    }
+  }
+
+  function draftFor(item: ReviewQueueItem) {
+    return edits[item.id] ?? {
+      sentimentLabel: item.sentimentLabel ?? "Unknown",
+      topics: item.topics?.join(", ") ?? "",
+      issueCategory: item.issueCategory ?? "Other",
+      urgencyLevel: item.urgencyLevel ?? "Low",
+      reviewerNotes: ""
+    };
+  }
+
+  function updateDraft(item: ReviewQueueItem, key: keyof ReturnType<typeof draftFor>, value: string) {
+    setEdits((current) => ({ ...current, [item.id]: { ...draftFor(item), [key]: value } }));
+  }
+
+  async function resolveItem(item: ReviewQueueItem) {
+    const draft = draftFor(item);
+
+    if (!draft.reviewerNotes.trim()) {
+      setMessage("Reviewer notes are required before resolving an item.");
+      return;
+    }
+
+    try {
+      const response = await authFetch(`${apiBaseUrl}/review-queue/${item.id}/resolve`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          sentimentLabel: draft.sentimentLabel,
+          topics: draft.topics.split(",").map((topic) => topic.trim()).filter(Boolean),
+          issueCategory: draft.issueCategory,
+          urgencyLevel: draft.urgencyLevel,
+          reviewerNotes: draft.reviewerNotes
+        })
+      });
+      const payload = await response.json();
+
+      if (!response.ok) {
+        throw new Error(payload.message ?? "Could not resolve review item.");
+      }
+
+      setEdits((current) => {
+        const next = { ...current };
+        delete next[item.id];
+        return next;
+      });
+      setMessage("Review item resolved and corrections saved.");
+      await loadReviewQueue();
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "Could not resolve review item.");
+    }
+  }
+
+  useEffect(() => {
+    void loadReviewQueue();
+  }, [status, page, pageSize]);
+
+  const totalPages = Math.max(Math.ceil(totalCount / pageSize), 1);
+  const firstRecordIndex = totalCount === 0 ? 0 : (page - 1) * pageSize + 1;
+  const lastRecordIndex = Math.min(page * pageSize, totalCount);
+
+  return (
+    <section className="rounded-2xl bg-white p-5 shadow-card">
+      <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <p className="text-xs font-black uppercase tracking-[0.18em] text-blue-600">Human Review Queue</p>
+          <h2 className="text-xl font-black text-slate-950">Review Low-Confidence And Critical Feedback</h2>
+          <p className="mt-1 text-sm text-slate-500">{message}</p>
+        </div>
+        <div className="flex flex-wrap items-end gap-3">
+          <FilterSelect
+            label="Status"
+            value={status}
+            values={["Open", "InReview", "Resolved", "Dismissed"]}
+            onChange={(value) => {
+              setPage(1);
+              setStatus(value);
+            }}
+          />
+          <button
+            className="inline-flex items-center gap-2 rounded-xl border border-slate-200 px-3 py-2 text-sm font-bold text-slate-600 hover:bg-slate-50"
+            type="button"
+            onClick={() => void loadReviewQueue()}
+          >
+            <RefreshCw size={16} className={isLoading ? "animate-spin" : ""} />
+            Refresh
+          </button>
+        </div>
+      </div>
+
+      <div className="space-y-3">
+        {records.map((item) => {
+          const draft = draftFor(item);
+
+          return (
+            <article key={item.id} className="rounded-xl border border-slate-100 bg-slate-50 p-4">
+              <div className="flex flex-wrap items-start justify-between gap-3">
+                <div>
+                  <p className="text-xs font-black uppercase tracking-wide text-slate-400">{item.sourceReferenceId}</p>
+                  <h3 className="font-black text-slate-950">{item.reason}</h3>
+                  <p className="mt-1 text-sm text-slate-500">{item.dealerName ?? "Unassigned dealer"} · {new Date(item.feedbackDate).toLocaleDateString()}</p>
+                </div>
+                <Badge tone={item.status === "Resolved" ? "green" : item.status === "InReview" ? "amber" : "red"}>{item.status}</Badge>
+              </div>
+              <p className="mt-3 line-clamp-2 text-sm leading-6 text-slate-600">{item.maskedText ?? item.rawText}</p>
+              <div className="mt-4 grid gap-3 md:grid-cols-4">
+                <FilterSelect label="Sentiment" value={draft.sentimentLabel} values={sentimentLabels} onChange={(value) => updateDraft(item, "sentimentLabel", value)} />
+                <FilterSelect label="Issue" value={draft.issueCategory} values={issueCategories} onChange={(value) => updateDraft(item, "issueCategory", value)} />
+                <FilterSelect label="Urgency" value={draft.urgencyLevel} values={urgencyLevels} onChange={(value) => updateDraft(item, "urgencyLevel", value)} />
+                <FilterInput label="Topics" value={draft.topics} placeholder="comma-separated" onChange={(value) => updateDraft(item, "topics", value)} />
+              </div>
+              <textarea
+                className="mt-3 min-h-20 w-full rounded-xl border border-slate-200 px-3 py-2 text-sm outline-none focus:border-blue-400"
+                placeholder="Reviewer notes for traceability..."
+                value={draft.reviewerNotes}
+                onChange={(event) => updateDraft(item, "reviewerNotes", event.target.value)}
+              />
+              <div className="mt-3 flex justify-end">
+                <button
+                  className="rounded-xl bg-blue-600 px-3 py-2 text-xs font-black text-white disabled:cursor-not-allowed disabled:bg-slate-300"
+                  type="button"
+                  disabled={item.status === "Resolved" || !draft.reviewerNotes.trim()}
+                  onClick={() => void resolveItem(item)}
+                >
+                  Resolve Review
+                </button>
+              </div>
+            </article>
+          );
+        })}
+        {records.length === 0 ? (
+          <p className="rounded-xl bg-slate-50 p-4 text-sm font-semibold text-slate-500">{isLoading ? "Loading review items..." : "No review items to show."}</p>
+        ) : null}
+      </div>
+
+      <div className="mt-4 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-slate-100 px-4 py-3 text-sm">
+        <span className="font-semibold text-slate-600">
+          Showing {firstRecordIndex}-{lastRecordIndex} of {totalCount}
+        </span>
+        <div className="flex flex-wrap items-center gap-3">
+          <label className="flex items-center gap-2 text-xs font-bold uppercase tracking-wide text-slate-400">
+            Rows
+            <select
+              className="rounded-lg border border-slate-200 bg-white px-2 py-1.5 text-sm font-semibold text-slate-700"
+              value={pageSize}
+              onChange={(event) => {
+                setPage(1);
+                setPageSize(Number(event.target.value));
+              }}
+            >
+              {pageSizeOptions.map((option) => (
+                <option key={option} value={option}>{option}</option>
+              ))}
+            </select>
+          </label>
+          <span className="font-bold text-slate-700">Page {page} of {totalPages}</span>
+          <button className="rounded-lg border border-slate-200 px-3 py-1.5 font-bold text-slate-600 disabled:opacity-40" type="button" disabled={page <= 1 || isLoading} onClick={() => setPage((current) => Math.max(current - 1, 1))}>
+            Previous
+          </button>
+          <button className="rounded-lg border border-slate-200 px-3 py-1.5 font-bold text-slate-600 disabled:opacity-40" type="button" disabled={page >= totalPages || isLoading} onClick={() => setPage((current) => Math.min(current + 1, totalPages))}>
+            Next
+          </button>
+        </div>
+      </div>
+    </section>
+  );
 }
 
 function FeedbackExplorer({ authFetch }: { authFetch: AuthFetch }) {

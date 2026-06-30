@@ -328,9 +328,18 @@ VOC-017 generates editable dealer response drafts from feedback detail. Drafts r
 POST /api/v1/feedback/:id/response-draft
 ```
 
+## Human Review Queue
+
+VOC-019 routes low-confidence classifications and critical feedback to `human_review_queue`. Reviewer-capable users can review paginated queue items, correct sentiment, topics, issue category, and urgency, then resolve the item with reviewer notes.
+
+```text
+GET /api/v1/review-queue?status=Open&limit=25&offset=0
+PATCH /api/v1/review-queue/:id/resolve
+```
+
 ## Feedback Explorer UI
 
-VOC-011 adds a frontend feedback workspace available from the top menu. The workspace contains feedback upload and feedback explorer on a separate page from the command center. It loads `GET /api/v1/feedback`, supports source, dealer, model, date range, sentiment, issue, urgency, and churn risk filters, and paginated list navigation using `limit` and `offset`. It opens `GET /api/v1/feedback/:id` details with raw text, masked text, translated text, sentiment, topics, issue classification, response drafts, recovery tasks, and related review items.
+VOC-011 adds a frontend feedback workspace available from the top menu. The workspace contains feedback upload, human review queue for reviewer-capable users, and feedback explorer on a separate page from the command center. It loads `GET /api/v1/feedback`, supports source, dealer, model, date range, sentiment, issue, urgency, and churn risk filters, and paginated list navigation using `limit` and `offset`. It opens `GET /api/v1/feedback/:id` details with raw text, masked text, translated text, sentiment, topics, issue classification, response drafts, recovery tasks, and related review items.
 
 ## Important Development Rule
 
