@@ -145,6 +145,7 @@ interface ExecutiveDashboardSummary {
   sentimentDistribution: Array<{ label: string; count: number }>;
   churnRiskDistribution: Array<{ label: string; count: number }>;
   topIssueCategories: Array<{ category: string; count: number }>;
+  warrantySignals: WarrantySignal[];
   dealerComparison: Array<{
     dealerId: string;
     dealerName: string;
@@ -156,6 +157,23 @@ interface ExecutiveDashboardSummary {
     openEscalations: number;
     feedbackCount: number;
   }>;
+}
+
+interface WarrantySignal {
+  id: string;
+  dealerId: string | null;
+  dealerName: string | null;
+  warrantyClaimId: string | null;
+  feedbackRecordId: string | null;
+  model: string | null;
+  partCode: string | null;
+  issueCategory: string | null;
+  signalScore: number | null;
+  status: string;
+  supportingCount: number;
+  summary: string | null;
+  detectedAt: string;
+  supportingFeedbackRecordIds: string[];
 }
 
 interface DealerDashboardSummary {
@@ -494,6 +512,7 @@ function DashboardPage() {
 function ExecutiveDashboardPage({ authFetch }: { authFetch: AuthFetch }) {
   const [dashboard, setDashboard] = useState<ExecutiveDashboardSummary | null>(null);
   const [isLoadingDashboard, setIsLoadingDashboard] = useState(false);
+  const [isRunningWarrantySignals, setIsRunningWarrantySignals] = useState(false);
   const [dashboardMessage, setDashboardMessage] = useState("Loading executive dashboard...");
 
   async function loadDashboard() {
@@ -521,6 +540,27 @@ function ExecutiveDashboardPage({ authFetch }: { authFetch: AuthFetch }) {
     void loadDashboard();
   }, []);
 
+  async function runWarrantySignalDetection() {
+    setIsRunningWarrantySignals(true);
+    setDashboardMessage("Detecting warranty and quality signals...");
+
+    try {
+      const response = await authFetch(`${apiBaseUrl}/warranty-signals/run`, { method: "POST" });
+      const payload = await response.json();
+
+      if (!response.ok) {
+        throw new Error(payload.message ?? "Could not detect warranty signals.");
+      }
+
+      setDashboardMessage(`${payload.detectedCount ?? 0} warranty signal group(s) refreshed.`);
+      await loadDashboard();
+    } catch (error) {
+      setDashboardMessage(error instanceof Error ? error.message : "Could not detect warranty signals.");
+    } finally {
+      setIsRunningWarrantySignals(false);
+    }
+  }
+
   const positiveRate = dashboard?.totalFeedback ? Math.round((dashboard.positiveFeedback / dashboard.totalFeedback) * 100) : 76;
   const negativeRate = dashboard?.totalFeedback ? Math.round((dashboard.negativeFeedback / dashboard.totalFeedback) * 100) : 18;
   const dashboardMetrics = [
@@ -545,6 +585,7 @@ function ExecutiveDashboardPage({ authFetch }: { authFetch: AuthFetch }) {
     { label: "Medium", count: 0 },
     { label: "Low", count: 0 }
   ];
+  const warrantySignals = dashboard?.warrantySignals.length ? dashboard.warrantySignals : [];
   const dealerRows = dashboard?.dealerComparison.length ? dashboard.dealerComparison : dealers.map((dealer, index) => ({
     dealerId: dealer,
     dealerName: dealer,
@@ -574,6 +615,15 @@ function ExecutiveDashboardPage({ authFetch }: { authFetch: AuthFetch }) {
               <RefreshCw size={16} className={isLoadingDashboard ? "animate-spin" : ""} />
               Refresh
             </button>
+            <button
+              className="inline-flex items-center gap-2 rounded-xl bg-blue-600 px-3 py-2 text-sm font-bold text-white disabled:cursor-not-allowed disabled:bg-slate-300"
+              type="button"
+              disabled={isRunningWarrantySignals}
+              onClick={() => void runWarrantySignalDetection()}
+            >
+              <RefreshCw size={16} className={isRunningWarrantySignals ? "animate-spin" : ""} />
+              Run Detection
+            </button>
           </div>
 
           <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-5">
@@ -593,6 +643,30 @@ function ExecutiveDashboardPage({ authFetch }: { authFetch: AuthFetch }) {
 
           <DashboardPanel title="Churn Risk Distribution" subtitle="Customers by latest generated churn risk">
             <DistributionList rows={churnRiskRows.map((row) => ({ label: row.label, value: row.count }))} tone="issue" />
+          </DashboardPanel>
+
+          <DashboardPanel title="Warranty And Quality Signals" subtitle="Active grouped signals by model, part, issue, and dealer">
+            <div className="space-y-3">
+              {warrantySignals.length ? (
+                warrantySignals.map((signal) => (
+                  <div key={signal.id} className="rounded-xl border border-slate-100 bg-slate-50 p-3">
+                    <div className="flex items-start justify-between gap-3">
+                      <div>
+                        <p className="font-bold text-slate-900">{signal.model ?? "Unknown model"} · {signal.partCode ?? "No part"}</p>
+                        <p className="mt-1 text-xs font-semibold text-slate-500">
+                          {signal.dealerName ?? "Unassigned dealer"} · {signal.issueCategory ?? "Other"} · {signal.supportingCount} supporting
+                        </p>
+                      </div>
+                      <Badge tone={signal.status === "Escalated" ? "red" : signal.status === "UnderReview" ? "amber" : "blue"}>{signal.status}</Badge>
+                    </div>
+                    <p className="mt-2 text-sm leading-6 text-slate-600">{signal.summary ?? "Signal summary pending."}</p>
+                    <p className="mt-2 text-xs font-bold text-slate-400">Score {Math.round(signal.signalScore ?? 0)}/100</p>
+                  </div>
+                ))
+              ) : (
+                <p className="rounded-xl bg-slate-50 p-4 text-sm font-semibold text-slate-500">No active warranty signals detected yet.</p>
+              )}
+            </div>
           </DashboardPanel>
 
           <div className="grid gap-6 xl:grid-cols-2">

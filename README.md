@@ -288,7 +288,16 @@ VOC-012 adds a data-backed OEM executive dashboard endpoint and exposes it throu
 GET /api/v1/dashboard/executive
 ```
 
-The dashboard shows sentiment distribution, top issue categories, dealer comparison, critical feedback count, and open warranty signal count.
+The dashboard shows sentiment distribution, top issue categories, dealer comparison, critical feedback count, active warranty/quality signals, and open warranty signal count.
+
+## Warranty And Quality Signals
+
+VOC-018 detects recurring warranty-related quality signals by grouping feedback by dealer, model, part code, and issue category. Detection uses `WARRANTY_SIGNAL_LOOKBACK_DAYS` and `WARRANTY_SIGNAL_MIN_SUPPORTING_COUNT`, stores results in `warranty_signals`, and lists active signals on the Executive Dashboard.
+
+```text
+POST /api/v1/warranty-signals/run
+GET /api/v1/warranty-signals?limit=10
+```
 
 ## Dealer Dashboard
 

@@ -27,6 +27,8 @@ const envSchema = z.object({
   MIGRATIONS_DIR: z.string().default("src/backend/data/migrations"),
   UPLOAD_MAX_FILE_SIZE_BYTES: z.coerce.number().int().positive().default(5_242_880),
   REPEAT_COMPLAINT_LOOKBACK_DAYS: z.coerce.number().int().positive().default(90),
+  WARRANTY_SIGNAL_LOOKBACK_DAYS: z.coerce.number().int().positive().default(180),
+  WARRANTY_SIGNAL_MIN_SUPPORTING_COUNT: z.coerce.number().int().positive().default(2),
   JWT_ACCESS_SECRET: z.string().min(16),
   JWT_REFRESH_SECRET: z.string().min(16),
   JWT_ACCESS_TOKEN_TTL_SECONDS: z.coerce.number().int().positive().default(900),
