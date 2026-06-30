@@ -1,4 +1,5 @@
 import { pool } from "../db/pool.js";
+import { listActiveWarrantySignals, type WarrantySignalDto } from "../warranty/warrantySignalService.js";
 
 export interface ExecutiveDashboardSummary {
   totalFeedback: number;
@@ -10,6 +11,7 @@ export interface ExecutiveDashboardSummary {
   sentimentDistribution: Array<{ label: string; count: number }>;
   churnRiskDistribution: Array<{ label: string; count: number }>;
   topIssueCategories: Array<{ category: string; count: number }>;
+  warrantySignals: WarrantySignalDto[];
   dealerComparison: Array<{
     dealerId: string;
     dealerName: string;
@@ -25,7 +27,7 @@ export interface ExecutiveDashboardSummary {
 
 export async function getExecutiveDashboardSummary(): Promise<ExecutiveDashboardSummary> {
   // Dashboard queries intentionally follow indexed reporting paths defined in the prototype schema.
-  const [totals, sentimentDistribution, churnRiskDistribution, topIssueCategories, dealerComparison] = await Promise.all([
+  const [totals, sentimentDistribution, churnRiskDistribution, topIssueCategories, warrantySignals, dealerComparison] = await Promise.all([
     pool.query<{
       totalFeedback: number;
       positiveFeedback: number;
@@ -74,6 +76,7 @@ export async function getExecutiveDashboardSummary(): Promise<ExecutiveDashboard
         LIMIT 8
       `
     ),
+    listActiveWarrantySignals(5),
     pool.query<ExecutiveDashboardSummary["dealerComparison"][number]>(
       `
         SELECT
@@ -105,6 +108,7 @@ export async function getExecutiveDashboardSummary(): Promise<ExecutiveDashboard
     sentimentDistribution: sentimentDistribution.rows,
     churnRiskDistribution: churnRiskDistribution.rows,
     topIssueCategories: topIssueCategories.rows,
+    warrantySignals,
     dealerComparison: dealerComparison.rows
   };
 }

@@ -7,6 +7,7 @@ import { feedbackRouter } from "./feedback.js";
 import { healthRouter } from "./health.js";
 import { responsesRouter } from "./responses.js";
 import { uploadsRouter } from "./uploads.js";
+import { warrantyRouter } from "./warranty.js";
 
 export const v1Router = Router();
 
@@ -18,4 +19,5 @@ v1Router.use(dashboardRouter);
 v1Router.use(feedbackRouter);
 v1Router.use(crmRouter);
 v1Router.use(responsesRouter);
+v1Router.use(warrantyRouter);
 

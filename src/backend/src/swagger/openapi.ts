@@ -247,6 +247,68 @@ export const openApiDocument = {
         }
       }
     },
+    "/warranty-signals/run": {
+      post: {
+        tags: ["Warranty Signals"],
+        summary: "Detect warranty and quality signals",
+        description:
+          "Groups warranty-related feedback by model, part code, issue category, and dealer, then creates or updates active warranty quality signals.",
+        operationId: "runWarrantySignalDetection",
+        responses: {
+          "200": {
+            description: "Warranty signal detection completed",
+            content: {
+              "application/json": {
+                schema: {
+                  $ref: "#/components/schemas/WarrantySignalDetectionResult"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/warranty-signals": {
+      get: {
+        tags: ["Warranty Signals"],
+        summary: "List active warranty and quality signals",
+        description: "Returns active Open, UnderReview, and Escalated warranty quality signals with supporting feedback references.",
+        operationId: "listActiveWarrantySignals",
+        parameters: [
+          {
+            name: "limit",
+            in: "query",
+            schema: {
+              type: "integer",
+              minimum: 1,
+              maximum: 50,
+              default: 10
+            }
+          }
+        ],
+        responses: {
+          "200": {
+            description: "Active warranty signals returned",
+            content: {
+              "application/json": {
+                schema: {
+                  type: "object",
+                  required: ["signals"],
+                  properties: {
+                    signals: {
+                      type: "array",
+                      items: {
+                        $ref: "#/components/schemas/WarrantySignal"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/uploads/feedback": {
       post: {
         tags: ["Uploads"],
@@ -1291,6 +1353,7 @@ export const openApiDocument = {
           "sentimentDistribution",
           "churnRiskDistribution",
           "topIssueCategories",
+          "warrantySignals",
           "dealerComparison"
         ],
         properties: {
@@ -1337,6 +1400,12 @@ export const openApiDocument = {
                   type: "integer"
                 }
               }
+            }
+          },
+          warrantySignals: {
+            type: "array",
+            items: {
+              $ref: "#/components/schemas/WarrantySignal"
             }
           },
           dealerComparison: {
@@ -2194,6 +2263,58 @@ export const openApiDocument = {
           draftText: {
             type: "string",
             description: "Editable response draft for dealer review before use."
+          }
+        }
+      },
+      WarrantySignal: {
+        type: "object",
+        required: ["id", "status", "supportingCount", "detectedAt", "supportingFeedbackRecordIds"],
+        properties: {
+          id: { type: "string", format: "uuid" },
+          dealerId: { type: "string", format: "uuid", nullable: true },
+          dealerName: { type: "string", nullable: true },
+          warrantyClaimId: { type: "string", format: "uuid", nullable: true },
+          feedbackRecordId: { type: "string", format: "uuid", nullable: true },
+          model: { type: "string", nullable: true },
+          partCode: { type: "string", nullable: true },
+          issueCategory: {
+            type: "string",
+            nullable: true,
+            enum: [
+              "ServiceQuality",
+              "RepairQuality",
+              "StaffBehavior",
+              "PriceTransparency",
+              "PartsAvailability",
+              "WarrantyConcern",
+              "VehicleQuality",
+              "DeliveryDelay",
+              "FacilityExperience",
+              "DigitalExperience",
+              "Other"
+            ]
+          },
+          signalScore: { type: "number", nullable: true },
+          status: { type: "string", enum: ["Open", "UnderReview", "Escalated", "Closed"] },
+          supportingCount: { type: "integer" },
+          summary: { type: "string", nullable: true },
+          detectedAt: { type: "string", format: "date-time" },
+          supportingFeedbackRecordIds: {
+            type: "array",
+            items: { type: "string", format: "uuid" }
+          }
+        }
+      },
+      WarrantySignalDetectionResult: {
+        type: "object",
+        required: ["lookbackDays", "minimumSupportingCount", "detectedCount", "signals"],
+        properties: {
+          lookbackDays: { type: "integer", example: 180 },
+          minimumSupportingCount: { type: "integer", example: 2 },
+          detectedCount: { type: "integer", example: 3 },
+          signals: {
+            type: "array",
+            items: { $ref: "#/components/schemas/WarrantySignal" }
           }
         }
       },
