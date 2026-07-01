@@ -13,6 +13,30 @@ const commandCenterMetrics = [
   { label: "Open Escalations", value: "247", suffix: "active", accent: "danger", trend: "+34" }
 ] as const;
 
+const demoJourneys = [
+  {
+    title: "Critical EV Charging Recovery",
+    feedbackId: "FB-015",
+    customer: "Customer Gurugram 015",
+    route: "Feedback Workspace",
+    summary: "Charging speed remains unresolved, urgency and churn risk can drive CRM recovery and response draft."
+  },
+  {
+    title: "Warranty Quality Signal",
+    feedbackId: "FB-005",
+    customer: "Customer Chennai 005",
+    route: "Executive Dashboard",
+    summary: "Hybrid warning lamp recurrence can be grouped into warranty quality signals by model, part, issue, and dealer."
+  },
+  {
+    title: "Human Review Correction",
+    feedbackId: "FB-013",
+    customer: "Customer Indore 013",
+    route: "Feedback Workspace",
+    summary: "Reviewer corrects low-confidence classification, updates topics, issue, urgency, and stores review notes."
+  }
+] as const;
+
 const sourceTypes = ["Survey", "JobCard", "WarrantyClaim", "GoogleReview", "SocialMedia", "CallCenter", "MobileApp", "ManualUpload"];
 const sentimentLabels = ["Positive", "Neutral", "Negative", "Mixed", "Unknown"];
 const issueCategories = [
@@ -501,6 +525,24 @@ function DashboardPage() {
             <MetricCard key={metric.label} {...metric} />
           ))}
         </div>
+
+        <DashboardPanel title="Prototype Walkthrough" subtitle="Curated journeys for stakeholder validation">
+          <div className="grid gap-3 xl:grid-cols-3">
+            {demoJourneys.map((journey) => (
+              <article key={journey.feedbackId} className="rounded-xl border border-slate-100 bg-slate-50 p-4">
+                <div className="mb-3 flex items-start justify-between gap-3">
+                  <div>
+                    <p className="text-xs font-black uppercase tracking-wide text-blue-600">{journey.feedbackId}</p>
+                    <h3 className="font-black text-slate-950">{journey.title}</h3>
+                  </div>
+                  <Badge tone="blue">{journey.route}</Badge>
+                </div>
+                <p className="text-sm font-semibold text-slate-600">{journey.customer}</p>
+                <p className="mt-2 text-sm leading-6 text-slate-500">{journey.summary}</p>
+              </article>
+            ))}
+          </div>
+        </DashboardPanel>
 
         <div className="grid gap-6 xl:grid-cols-2">
           <DashboardPanel title="CSI Score Trend" subtitle="Customer Satisfaction Index · Jan 2025 - Jun 2026">
@@ -1484,7 +1526,7 @@ function FeedbackExplorer({ authFetch }: { authFetch: AuthFetch }) {
           ))}
           {records.length === 0 ? (
             <div className="px-4 py-10 text-center text-sm font-semibold text-slate-500">
-              {isLoading ? "Loading feedback..." : "No records to show."}
+              {isLoading ? "Loading feedback records..." : "No records match these filters. Clear filters or reset demo data to return to the curated walkthrough."}
             </div>
           ) : null}
         </div>

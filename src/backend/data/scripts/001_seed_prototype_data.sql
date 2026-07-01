@@ -1,6 +1,11 @@
 -- VOC-003 prototype seed data.
 -- This script is resettable: it clears prototype tables and reloads demo data.
 -- Run explicitly with: npm run seed:prototype --workspace @voc/backend
+--
+-- VOC-021 curated journeys supported by this data:
+-- 1. FB-015: Critical EV charging recovery at Velocity Auto.
+-- 2. FB-005: Hybrid warning lamp warranty quality signal at Elite Autoworks.
+-- 3. FB-013: Human review correction scenario at Galaxy Auto Center.
 
 BEGIN;
 
